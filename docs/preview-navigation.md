@@ -8,6 +8,8 @@
 
 `DevicePreview` 将画布可见范围反算到 iframe 坐标，通过 `cea:visible-area` 同步给播放页；列表由 `FitStage` 提供同一消息。原生 Popover 在这个范围内限制尺寸并保留原生滚动，测量不包含入场 transform，关闭后恢复素材样式。弹层不参与组件内容边界计算。
 
+首次定位从 `beforetoggle` 安排到下一次原生绘制回调：此时弹层已经进入 top layer，但首帧还没有画出。`toggle` 可能晚于首帧，不能用来首次限制高度和修正位置。列表缩略图与详情分别验证，避免只有完整视口正常、受裁切的卡片仍在展开时跳动。独立合成数据回归见 `popover-first-paint.browser.ts`，天气列表回归见 `weather-thumbnail.browser.ts`。
+
 播放页只给打开的 Popover 设置 `will-change: transform`，避免缩放 iframe 中的弹层文字反复重绘出重影。关闭后恢复默认，不给所有控件常驻图层。`weather-stability.browser.ts` 对菜单连续截图做像素对比，补充坐标和透明度检查。
 
 编辑 Tab 隐藏时暂停库的尺寸观察，恢复时以当前尺寸重新观察，避免 `display:none` 的零尺寸改变预览位置。

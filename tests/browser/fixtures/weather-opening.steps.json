@@ -1,0 +1,8 @@
+[
+  { "action": "wait", "ms": 800 },
+  { "action": "click", "selector": ".wx-weather-trigger" },
+  { "action": "wait", "ms": 700 },
+  { "action": "key", "key": "Escape" },
+  { "action": "click", "selector": ".wx-weather-trigger" },
+  { "action": "wait", "ms": 700 }
+]

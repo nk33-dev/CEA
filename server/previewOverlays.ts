@@ -58,11 +58,13 @@ export const PREVIEW_OVERLAY_SCRIPT = String.raw`
       el.scrollTop=scroll.y;
     }
   }
-  document.addEventListener('toggle',function(event){
+  document.addEventListener('beforetoggle',function(event){
     var el=event.target;
     if(!el.matches||!el.matches('[popover]'))return;
     if(event.newState==='closed')restoreOverlay(el);
-    else fitOverlay(el);
+    // beforetoggle 时仍是 display:none；下一次绘制前测量已打开的 top layer。
+    // toggle 可能等到首帧之后才送达，不能用它做首次定位。
+    else nativeFrame(function(){fitOverlay(el);});
   },true);
   addEventListener('blur',function(){
     document.querySelectorAll('[popover]:popover-open').forEach(function(el){
