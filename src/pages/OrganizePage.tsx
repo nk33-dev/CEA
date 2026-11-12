@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -22,6 +23,7 @@ import { useContentLocale } from '../lib/prefs.ts';
 import { SelectControl } from '../components/SelectControl.tsx';
 
 export function OrganizePage() {
+  useUi();
   const { categories, tags, refresh, notify } = useLibrary();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'categories' ? 'categories' : 'tags';
@@ -76,7 +78,7 @@ export function OrganizePage() {
       await refresh();
       setSelected(new Set());
       setAction(null);
-      notify('已保存');
+      notify(uiText("已保存"));
     } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   };
@@ -97,77 +99,77 @@ export function OrganizePage() {
   };
   return (
     <div className="workspace workspace-admin organize">
-    <header className="workspace-head"><div><h1>分类与标签</h1><p>{categories.length} 个分类 · {tags.length} 个标签</p></div>
+    <header className="workspace-head"><div><h1>{uiText("分类与标签")}</h1><p>{categories.length}{uiText(" 个分类 · ")}{tags.length}{uiText(" 个标签")}</p></div>
         <div className="settings-actions"><ContentLanguage /></div>
       </header>
       <div className="organize-toolbar">
-      <div className="workspace-tabs" role="tablist" aria-label="整理类型" onKeyDown={handleTabKeys}>
+      <div className="workspace-tabs" role="tablist" aria-label={uiText("整理类型")} onKeyDown={handleTabKeys}>
         <SelectionIndicator value={tab} underline />
-        <button role="tab" aria-selected={tab === 'tags'} tabIndex={tab === 'tags' ? 0 : -1} onClick={() => setParams({})} data-selection-item>标签 <span>{tags.length}</span></button>
-        <button role="tab" aria-selected={tab === 'categories'} tabIndex={tab === 'categories' ? 0 : -1} onClick={() => setParams({ tab: 'categories' })} data-selection-item>分类 <span>{categories.length}</span></button>
+        <button role="tab" aria-selected={tab === 'tags'} tabIndex={tab === 'tags' ? 0 : -1} onClick={() => setParams({})} data-selection-item>{uiText("标签 ")}<span>{tags.length}</span></button>
+        <button role="tab" aria-selected={tab === 'categories'} tabIndex={tab === 'categories' ? 0 : -1} onClick={() => setParams({ tab: 'categories' })} data-selection-item>{uiText("分类 ")}<span>{categories.length}</span></button>
       </div>
       <div className="organize-tools">
-        <label className="search"><Search size={16} /><input aria-label={tab === 'tags' ? '搜索标签' : '搜索分类'} placeholder={tab === 'tags' ? '搜索标签' : '搜索分类'} value={query} onChange={e => setQuery(e.target.value)} />
-          {query && <button type="button" className="search-clear" aria-label="清空整理搜索" onClick={() => setQuery('')}><X size={14} /></button>}
+        <label className="search"><Search size={16} /><input aria-label={tab === 'tags' ? uiText("搜索标签") : uiText("搜索分类")} placeholder={tab === 'tags' ? uiText("搜索标签") : uiText("搜索分类")} value={query} onChange={e => setQuery(e.target.value)} />
+          {query && <button type="button" className="search-clear" aria-label={uiText("清空整理搜索")} onClick={() => setQuery('')}><X size={14} /></button>}
         </label>
-        <SelectControl label="译名状态" value={status} onValueChange={setStatus}
-          options={[{ value: 'all', label: '全部译名' }, { value: 'missing', label: `缺少中英译名 (${missing})` }]} />
-        <SelectControl label="整理排序" value={order} onValueChange={setOrder}
-          options={[{ value: 'usage', label: '使用最多' }, { value: 'name', label: '按名称' }, ...(tab === 'categories' ? [{ value: 'manual', label: '手动顺序' }] : [])]} />
-        {tab === 'categories' && <button className="btn btn-sm" onClick={() => open('create')}><Plus size={15} />新建分类</button>}
-        <span className="muted">{selected.size ? `已选 ${selected.size} 项` : `${rows.length} 项`}</span>
+        <SelectControl label={uiText("译名状态")} value={status} onValueChange={setStatus}
+          options={[{ value: 'all', label: uiText("全部译名") }, { value: 'missing', label: uiText("缺少中英译名 ({{value0}})", {value0: missing}) }]} />
+        <SelectControl label={uiText("整理排序")} value={order} onValueChange={setOrder}
+          options={[{ value: 'usage', label: uiText("使用最多") }, { value: 'name', label: uiText("按名称") }, ...(tab === 'categories' ? [{ value: 'manual', label: uiText("手动顺序") }] : [])]} />
+        {tab === 'categories' && <button className="btn btn-sm" onClick={() => open('create')}><Plus size={15} />{uiText("新建分类")}</button>}
+        <span className="muted">{selected.size ? uiText("已选 {{value0}} 项", {value0: selected.size}) : uiText("{{value0}} 项", {value0: rows.length})}</span>
         {selected.size > 0 && <div className="organize-selection">
-          {tab === 'tags' && <button className="btn btn-sm btn-quiet" aria-label="合并所选标签" onClick={() => open('merge')}><Merge size={15} />合并</button>}
-          <button className="btn btn-sm btn-quiet icon-btn-danger" aria-label="删除所选" onClick={() => open('delete')}><Trash2 size={15} />删除</button>
-          <button className="icon-btn icon-btn-sm" aria-label="清除选择" title="清除选择" onClick={() => setSelected(new Set())}><X size={15} /></button>
+          {tab === 'tags' && <button className="btn btn-sm btn-quiet" aria-label={uiText("合并所选标签")} onClick={() => open('merge')}><Merge size={15} />{uiText("合并")}</button>}
+          <button className="btn btn-sm btn-quiet icon-btn-danger" aria-label={uiText("删除所选")} onClick={() => open('delete')}><Trash2 size={15} />{uiText("删除")}</button>
+          <button className="icon-btn icon-btn-sm" aria-label={uiText("清除选择")} title={uiText("清除选择")} onClick={() => setSelected(new Set())}><X size={15} /></button>
         </div>}
       </div>
       </div>
       <div className="organize-headings" style={{ gridTemplateColumns: `repeat(${columns},minmax(0,1fr))` }}>
       {Array.from({ length: columns }, (_, index) => <div key={index} className={`organize-head${tab === 'categories' ? ' with-order' : ''}`}>
-        {index === 0 ? <input ref={selectAll} type="checkbox" aria-label="选择全部筛选结果" checked={allSelected} onChange={() => setSelected(previous => {
+        {index === 0 ? <input ref={selectAll} type="checkbox" aria-label={uiText("选择全部筛选结果")} checked={allSelected} onChange={() => setSelected(previous => {
           const next = new Set(previous);
           for (const row of rows) allSelected ? next.delete(row.id) : next.add(row.id);
           return next;
         })} /> : <span />}
-        <span>名称与中英译名</span><span>组件数</span><span />
+        <span>{uiText("名称与中英译名")}</span><span>{uiText("组件数")}</span><span />
       </div>)}
       </div>
-      <div className="organize-list" style={rows.length <= 20 ? { height: Math.max(88, Math.ceil(rows.length / columns) * 64) } : undefined} ref={scroll} role="group" aria-label={tab === 'tags' ? '标签列表' : '分类列表'}>
+      <div className="organize-list" style={rows.length <= 20 ? { height: Math.max(88, Math.ceil(rows.length / columns) * 64) } : undefined} ref={scroll} role="group" aria-label={tab === 'tags' ? uiText("标签列表") : uiText("分类列表")}>
         {rows.length ? <div style={{ height: virtual.getTotalSize(), position: 'relative' }}>
           {virtual.getVirtualItems().map(item => <div className="organize-line" key={item.key} style={{ position: 'absolute', top: item.start, width: '100%', height: item.size, gridTemplateColumns: `repeat(${columns},minmax(0,1fr))` }}>
             {rows.slice(item.index * columns, (item.index + 1) * columns).map(row => <div key={row.id} className={`organize-row${selected.has(row.id) ? ' is-selected' : ''}${tab === 'categories' ? ' with-order' : ''}`}>
-              <input type="checkbox" aria-label={`选择 ${row.name}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
+              <input type="checkbox" aria-label={uiText("选择 {{value0}}", {value0: row.name})} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
               <span className="organize-name" title={row.name}>
                 <strong>{localizedName(row.name, row.labels, locale)}</strong>
                 <span className="organize-translations">
-                  {['zh', 'en'].map(code => <span key={code} data-missing={!row.labels?.[code]?.trim() || undefined}><small>{code.toUpperCase()}</small> {row.labels?.[code]?.trim() || '待补充'}</span>)}
+                  {['zh', 'en'].map(code => <span key={code} data-missing={!row.labels?.[code]?.trim() || undefined}><small>{code.toUpperCase()}</small> {row.labels?.[code]?.trim() || uiText("待补充")}</span>)}
                 </span>
               </span>
-              <Link className="organize-count" aria-label={`查看 ${row.name} 的组件`} to={`/?${new URLSearchParams(tab === 'tags' ? { tags: JSON.stringify([row.name]) } : { category: row.id })}`}>{row.count}</Link>
+              <Link className="organize-count" aria-label={uiText("查看 {{value0}} 的组件", {value0: row.name})} to={`/?${new URLSearchParams(tab === 'tags' ? { tags: JSON.stringify([row.name]) } : { category: row.id })}`}>{row.count}</Link>
               <div className="organize-row-actions">
-                {tab === 'categories' && <><button className="icon-btn" aria-label={`上移 ${row.name}`} title="上移" disabled={busy || categories[0]?.id === row.id} onClick={() => void move(row.id, -1)}><ArrowUp size={14} /></button><button className="icon-btn" aria-label={`下移 ${row.name}`} title="下移" disabled={busy || categories.at(-1)?.id === row.id} onClick={() => void move(row.id, 1)}><ArrowDown size={14} /></button></>}
-                <button type="button" className="icon-btn" aria-label={`编辑译名 ${row.name}`} title="编辑译名" onClick={() => {
+                {tab === 'categories' && <><button className="icon-btn" aria-label={uiText("上移 {{value0}}", {value0: row.name})} title={uiText("上移")} disabled={busy || categories[0]?.id === row.id} onClick={() => void move(row.id, -1)}><ArrowUp size={14} /></button><button className="icon-btn" aria-label={uiText("下移 {{value0}}", {value0: row.name})} title={uiText("下移")} disabled={busy || categories.at(-1)?.id === row.id} onClick={() => void move(row.id, 1)}><ArrowDown size={14} /></button></>}
+                <button type="button" className="icon-btn" aria-label={uiText("编辑译名 {{value0}}", {value0: row.name})} title={uiText("编辑译名")} onClick={() => {
                   setSelected(new Set([row.id])); setLabels(row.labels ?? {}); open('translate', row.name);
                 }}><Languages size={15} /></button>
-                <button className="icon-btn" aria-label={`重命名 ${row.name}`} title="重命名" onClick={() => { setSelected(new Set([row.id])); open('rename', row.name); }}><Pencil size={15} /></button>
-                <button className="icon-btn icon-btn-danger" aria-label={`删除 ${row.name}`} title="删除" onClick={() => { setSelected(new Set([row.id])); open('delete', row.name); }}><Trash2 size={15} /></button>
+                <button className="icon-btn" aria-label={uiText("重命名 {{value0}}", {value0: row.name})} title={uiText("重命名")} onClick={() => { setSelected(new Set([row.id])); open('rename', row.name); }}><Pencil size={15} /></button>
+                <button className="icon-btn icon-btn-danger" aria-label={uiText("删除 {{value0}}", {value0: row.name})} title={uiText("删除")} onClick={() => { setSelected(new Set([row.id])); open('delete', row.name); }}><Trash2 size={15} /></button>
               </div>
             </div>)}
           </div>)}
-        </div> : <div className="empty"><p>{query ? '没有匹配项' : tab === 'tags' ? '还没有标签' : '还没有分类'}</p></div>}
+        </div> : <div className="empty"><p>{query ? uiText("没有匹配项") : tab === 'tags' ? uiText("还没有标签") : uiText("还没有分类")}</p></div>}
       </div>
       <Dialog open={!!action} onClose={() => setAction(null)} locked={busy} wide={action === 'translate'} className={action === 'translate' ? 'dialog-translation' : undefined}
-        title={action === 'translate' ? '编辑译名' : action === 'delete' ? `删除 ${selected.size} 个${tab === 'tags' ? '标签' : '分类'}？` : action === 'merge' ? `合并 ${selected.size} 个标签` : action === 'create' ? '新建分类' : '重命名'}
-        footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>取消</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || (action !== 'delete' && action !== 'translate' && !value.trim())} onClick={apply}>{busy ? '处理中…' : action === 'delete' ? '删除' : '保存'}</button></>}>
-        {action === 'delete' ? <p>{tab === 'tags' ? '这些标签会从关联组件上移除，组件保留。' : '关联组件会变为未分类，组件保留。'}</p>
+        title={action === 'translate' ? uiText("编辑译名") : action === 'delete' ? uiText("删除 {{value0}} 个{{value1}}？", {value0: selected.size,value1: tab === 'tags' ? '标签' : '分类'}) : action === 'merge' ? uiText("合并 {{value0}} 个标签", {value0: selected.size}) : action === 'create' ? uiText("新建分类") : uiText("重命名")}
+        footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>{uiText("取消")}</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || (action !== 'delete' && action !== 'translate' && !value.trim())} onClick={apply}>{busy ? uiText("处理中…") : action === 'delete' ? uiText("删除") : uiText("保存")}</button></>}>
+        {action === 'delete' ? <p>{tab === 'tags' ? uiText("这些标签会从关联组件上移除，组件保留。") : uiText("关联组件会变为未分类，组件保留。")}</p>
           : action === 'translate' ? <div className="organize-translation-editor">
             <p className="muted">{value}</p>
-            <label className="field"><span>中文译名</span><input value={labels.zh ?? ''} disabled={busy} maxLength={120} onChange={e => setLabels(previous => ({ ...previous, zh: e.target.value }))} autoFocus /></label>
-            <label className="field"><span>英文译名</span><input value={labels.en ?? ''} disabled={busy} maxLength={120} onChange={e => setLabels(previous => ({ ...previous, en: e.target.value }))} /></label>
-            <details><summary>更多语言</summary><TranslationEditor name={value} value={labels} onChange={setLabels} initialLocale={locale} disabled={busy} /></details>
+            <label className="field"><span>{uiText("中文译名")}</span><input value={labels.zh ?? ''} disabled={busy} maxLength={120} onChange={e => setLabels(previous => ({ ...previous, zh: e.target.value }))} autoFocus /></label>
+            <label className="field"><span>{uiText("英文译名")}</span><input value={labels.en ?? ''} disabled={busy} maxLength={120} onChange={e => setLabels(previous => ({ ...previous, en: e.target.value }))} /></label>
+            <details><summary>{uiText("更多语言")}</summary><TranslationEditor name={value} value={labels} onChange={setLabels} initialLocale={locale} disabled={busy} /></details>
           </div>
-          : <label className="field"><span>{action === 'merge' ? '合并为' : '名称'}</span><input autoFocus value={value} maxLength={tab === 'tags' ? 30 : 40} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && value.trim() && !busy) void apply(); }} /></label>}
+          : <label className="field"><span>{action === 'merge' ? uiText("合并为") : uiText("名称")}</span><input autoFocus value={value} maxLength={tab === 'tags' ? 30 : 40} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && value.trim() && !busy) void apply(); }} /></label>}
         {error && <p className="form-error" role="alert">{error}</p>}
       </Dialog>
     </div>

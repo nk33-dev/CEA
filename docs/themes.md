@@ -7,13 +7,13 @@
 | 组件主题 | `AppearanceToggle`、`previewThemeFor` | 只切换明确声明为双主题的实现，初始使用实现声明的默认配色 |
 | 舞台背景 | 详情和编辑预览工具栏中的太阳 / 月亮选项，`DeviceBackground` | 只改变组件外的舞台，初始为浅色，不改变源码和 AI 目标 |
 | AI 配色目标 | `themeChoices`、`themePrompt` | 沿用原配色、浅色、深色、双主题；只影响生成的提示词 |
-| 网站主题 | `PREF_UI_THEME`（`cea:ui:theme`） | 预留网站浅色、深色、跟随系统的独立偏好，不控制组件预览 |
+| 网站主题 | 顶栏、`PREF_UI_THEME`（`cea:ui:theme`） | CEA 浅色、深色、跟随系统的独立偏好，不控制组件预览 |
 
 详情和编辑页通过 `usePreviewSession` 保存临时预览状态，退出页面即丢弃；AI 目标同样只在当前详情有效。首页始终使用中性浅色舞台和组件原始默认配色。
 旧的 `cea:component-theme`、`cea:theme` 本机值不再读取，也不作为网站偏好的回退。
 播放页的舞台底色使用 `--cea-background`，不覆盖组件可能使用的 `--stage-bg` 配色变量。
 
-网站主题切换尚未开放。界面颜色使用网站 tokens（包括 `--code-editor-bg`、`--code-editor-fg`），预览舞台使用独立的 `--preview-light` / `--preview-dark`；不要用网站主题重写组件配色。
+网站主题通过 `html[data-ui-theme]` 和界面 tokens 生效（包括 `--code-editor-bg`、`--code-editor-fg`）；启动时在首屏绘制前恢复偏好。预览舞台使用独立的 `--preview-light` / `--preview-dark`，不要用网站主题重写组件配色或重载 iframe。
 
 ## 预览视图
 

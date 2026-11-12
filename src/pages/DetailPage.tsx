@@ -1,3 +1,4 @@
+import { uiI18n, uiText, useUi } from '../lib/uiI18n.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLoaderData, useNavigate, useRouteError } from 'react-router';
 import ArrowLeft from 'lucide-react/icons/arrow-left';
@@ -50,11 +51,13 @@ const REUSE: { kind: ReuseKind; label: string; caption: string; copy: string; by
 ];
 
 export function DetailPage() {
+  useUi();
   const loadedAsset = useLoaderData<AssetDetail>();
   return <DetailView key={`${loadedAsset.id}:${loadedAsset.updatedAt}`} initialAsset={loadedAsset} />;
 }
 
 function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
+  useUi();
   const navigate = useNavigate();
   const { notify, refresh, tags, categories } = useLibrary();
   const [asset, setAsset] = useState(initialAsset);
@@ -77,7 +80,8 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
   const appearance: Appearance = componentTheme ?? support.default;
   const previewTheme = previewThemeFor(support, appearance);
   const targetTheme = themeChoice;
-  const current = REUSE.find(r => r.kind === tab);
+  const currentSource = REUSE.find(r => r.kind === tab);
+  const current = useMemo(() => currentSource && ({ ...currentSource, label: uiText(currentSource.label), caption: uiText(currentSource.caption), copy: uiText(currentSource.copy) }), [currentSource, uiI18n.language]);
   const content = useMemo(() => (asset && current ? buildReuse(asset, current.kind, { framework: fw, locale, targetTheme }) : ''), [asset, current, fw, locale, targetTheme]);
   const parts = useMemo(() => asset && tab === 'source' ? sourceParts(asset, fw) : undefined, [asset, tab, fw]);
   const notes = useMemo(() => (asset ? codeNotes(pickVariant(asset, fw)) : { motion: [], notes: [] }), [asset, fw]);
@@ -90,7 +94,7 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
       void refresh();
     } catch (e) {
       setAsset(a => a && { ...a, favorite: !next });
-      notify(`收藏没有保存：${errorMessage(e)}`);
+      notify(uiText("收藏没有保存：{{value0}}", {value0: errorMessage(e)}));
     }
   };
 
@@ -98,7 +102,7 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
     setMenuOpen(false);
     setPacking(true);
     try {
-      notify(`参考包已下载：${await api.referencePackage(asset.id)}`);
+      notify(uiText("参考包已下载：{{value0}}", {value0: await api.referencePackage(asset.id)}));
     } catch (e) {
       notify(errorMessage(e));
     } finally {
@@ -111,7 +115,7 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
     try {
       await api.deleteAsset(asset.id);
       await refresh();
-      notify(`已删除「${localizedTitle(asset, locale)}」`);
+      notify(uiText("已删除「{{value0}}」", {value0: localizedTitle(asset, locale)}));
       navigate('/', { replace: true });
     } catch (e) {
       notify(errorMessage(e));
@@ -125,15 +129,15 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
   const category = categories.find(c => c.id === asset.categoryId);
   const tagLabels = new Map(tags.map(t => [t.name.toLowerCase(), localizedName(t.name, t.labels, locale)]));
   const tabs: { value: Tab; label: string }[] = [
-    ...REUSE.map(r => ({ value: r.kind as Tab, label: r.label })),
-    { value: 'notes', label: '说明' },
-    { value: 'media', label: asset.media.length ? `截图 ${asset.media.length}` : '截图' },
+    ...REUSE.map(r => ({ value: r.kind as Tab, label: uiText(r.label) })),
+    { value: 'notes', label: uiText("说明") },
+    { value: 'media', label: asset.media.length ? uiText("截图 {{value0}}", {value0: asset.media.length}) : uiText("截图") },
   ];
 
   return (
     <div className="studio studio-detail">
       <header className="studio-head">
-        <button type="button" className="icon-btn" aria-label="返回" onClick={() => (history.state?.idx > 0 ? navigate(-1) : navigate('/'))}>
+        <button type="button" className="icon-btn" aria-label={uiText("返回")} onClick={() => (history.state?.idx > 0 ? navigate(-1) : navigate('/'))}>
           <ArrowLeft size={18} strokeWidth={1.8} aria-hidden="true" />
         </button>
         <div className="studio-title">
@@ -149,14 +153,12 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
           <ContentLanguage />
           <button type="button" className={`btn btn-quiet fav-btn${asset.favorite ? ' is-on' : ''}`} aria-pressed={asset.favorite} onClick={toggleFavorite}>
             <Heart size={16} strokeWidth={1.8} aria-hidden="true" />
-            {asset.favorite ? '已收藏' : '收藏'}
+            {asset.favorite ? uiText("已收藏") : uiText("收藏")}
           </button>
           <Link to={`/a/${asset.id}/edit`} className="btn btn-quiet">
-            <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
-            编辑
-          </Link>
+            <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />{uiText(" 编辑 ")}</Link>
           <div className="menu-wrap">
-            <button type="button" className="icon-btn icon-btn-round" aria-label="更多操作" aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
+            <button type="button" className="icon-btn icon-btn-round" aria-label={uiText("更多操作")} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
               <MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" />
             </button>
             {menuOpen && (
@@ -164,14 +166,11 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
                 <div className="menu-scrim" onClick={() => setMenuOpen(false)} />
                 <div className="menu" role="menu" onKeyDown={e => e.key === 'Escape' && setMenuOpen(false)}>
                   <button type="button" role="menuitem" onClick={downloadPackage} disabled={packing}>
-                    <Package size={15} strokeWidth={1.8} aria-hidden="true" />下载参考包
-                  </button>
+                    <Package size={15} strokeWidth={1.8} aria-hidden="true" />{uiText("下载参考包 ")}</button>
                   <a role="menuitem" href={playPath(asset.id, fw)} target="_blank" rel="noreferrer" onClick={() => setMenuOpen(false)}>
-                    <ExternalLink size={15} strokeWidth={1.8} aria-hidden="true" />在新标签页打开
-                  </a>
+                    <ExternalLink size={15} strokeWidth={1.8} aria-hidden="true" />{uiText("在新标签页打开 ")}</a>
                   <button type="button" role="menuitem" className="menu-danger" onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}>
-                    <Trash2 size={15} strokeWidth={1.8} aria-hidden="true" />删除素材
-                  </button>
+                    <Trash2 size={15} strokeWidth={1.8} aria-hidden="true" />{uiText("删除素材 ")}</button>
                 </div>
               </>
             )}
@@ -179,29 +178,29 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
         </div>
       </header>
 
-      {(summary || category || asset.tags.length > 0) && <section className="studio-context" aria-label="组件信息">
+      {(summary || category || asset.tags.length > 0) && <section className="studio-context" aria-label={uiText("组件信息")}>
         {summary && <p className="reuse-desc">{summary}</p>}
         {(category || asset.tags.length > 0) && (
-          <ul className="tag-list" aria-label="分类与标签">
-            {category && <li><Link to={`/?category=${encodeURIComponent(category.id)}`} className="tag-chip" title={`分类：${localizedName(category.name, category.labels, locale)}`}><FolderOpen size={12} aria-hidden="true" />{localizedName(category.name, category.labels, locale)}</Link></li>}
+          <ul className="tag-list" aria-label={uiText("分类与标签")}>
+            {category && <li><Link to={`/?category=${encodeURIComponent(category.id)}`} className="tag-chip" title={uiText("分类：{{value0}}", {value0: localizedName(category.name, category.labels, locale)})}><FolderOpen size={12} aria-hidden="true" />{localizedName(category.name, category.labels, locale)}</Link></li>}
             {asset.tags.map(t => <li key={t}><Link to={`/?tags=${encodeURIComponent(JSON.stringify([t]))}`} className="tag-chip">{tagLabels.get(t.toLowerCase()) ?? t}</Link></li>)}
           </ul>
         )}
       </section>}
 
       <div className="studio-body">
-        <DeviceWorkspace fullscreen={fullscreen.active} background={background} onBackgroundChange={setBackground}><section className="panel panel-preview" aria-label="预览">
+        <DeviceWorkspace fullscreen={fullscreen.active} background={background} onBackgroundChange={setBackground}><section className="panel panel-preview" aria-label={uiText("预览")}>
           <FullscreenFrame fullscreen={fullscreen}>
           <div className="panel-bar">
-            {asset.frameworks.length > 1 && <SelectControl label="实现框架" value={fw} onValueChange={setFramework} icon={<Code size={14} />}
+            {asset.frameworks.length > 1 && <SelectControl label={uiText("实现框架")} value={fw} onValueChange={setFramework} icon={<Code size={14} />}
               options={asset.frameworks.map(f => ({ value: f, label: frameworkLabel(f) }))} />}
             <AppearanceToggle value={appearance} onChange={setComponentTheme} support={support} />
             <div className="panel-bar-right">
               <DeviceBackground />
-              <button type="button" className="icon-btn" aria-label={playing ? '暂停预览' : '播放预览'} title={playing ? '暂停预览' : '播放预览'} aria-pressed={!playing} onClick={() => setPlaying(p => !p)}>
+              <button type="button" className="icon-btn" aria-label={playing ? uiText("暂停预览") : uiText("播放预览")} title={playing ? uiText("暂停预览") : uiText("播放预览")} aria-pressed={!playing} onClick={() => setPlaying(p => !p)}>
                 {playing ? <Pause size={16} strokeWidth={1.8} aria-hidden="true" /> : <Play size={16} strokeWidth={1.8} aria-hidden="true" />}
               </button>
-              <button type="button" className="icon-btn" aria-label="重播" title="重播" onClick={() => { setPlaying(true); setReloadKey(k => k + 1); }}>
+              <button type="button" className="icon-btn" aria-label={uiText("重播")} title={uiText("重播")} onClick={() => { setPlaying(true); setReloadKey(k => k + 1); }}>
                 <RotateCcw size={16} strokeWidth={1.8} aria-hidden="true" />
               </button>
             </div>
@@ -218,8 +217,8 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
           </FullscreenFrame>
         </section></DeviceWorkspace>
 
-        <aside className="panel panel-reuse" aria-label="复用">
-          <div className="reuse-tabs" role="tablist" aria-label="复用方式" onKeyDown={handleTabKeys}>
+        <aside className="panel panel-reuse" aria-label={uiText("复用")}>
+          <div className="reuse-tabs" role="tablist" aria-label={uiText("复用方式")} onKeyDown={handleTabKeys}>
             <SelectionIndicator value={tab} underline />
             {tabs.map(t => (
               <button key={t.value} type="button" role="tab" id={`tab-${t.value}`} aria-controls="reuse-panel" data-selection-item
@@ -235,14 +234,14 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
                 <div className="reuse-top">
                   <span className="reuse-caption" title={current.caption}>{current.byFramework ? `${frameworkLabel(fw)} · ` : ''}{current.caption}</span>
                   <div className="reuse-tools">
-                    {current.kind !== 'source' && content && <SelectControl label="AI 配色目标" value={targetTheme}
+                    {current.kind !== 'source' && content && <SelectControl label={uiText("AI 配色目标")} value={targetTheme}
                       onValueChange={v => setTargetTheme(v as ReuseTheme)} options={reuseThemeOptions()} align="end" icon={<Palette size={14} aria-hidden="true" />} />}
                     <CopyButton key={current.kind} text={() => content} label={current.copy} className="icon-btn reuse-copy copy-compact" />
                   </div>
                 </div>
                 {content
-                  ? <CodeView text={content} parts={parts} prose={current.kind === 'idea'} label={`${current.label}内容`} />
-                  : <p className="reuse-empty">还没有写{current.label}，<Link to={`/a/${asset.id}/edit`} className="link-btn">去补上</Link></p>}
+                  ? <CodeView text={content} parts={parts} prose={current.kind === 'idea'} label={uiText("{{value0}}内容", {value0: current.label})} />
+                  : <p className="reuse-empty">{uiText("还没有写")}{current.label}，<Link to={`/a/${asset.id}/edit`} className="link-btn">{uiText("去补上")}</Link></p>}
               </>
             ) : tab === 'notes' ? (
               <NotesPanel notes={notes} locale={locale} />
@@ -256,33 +255,35 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="删除这个素材？"
+        title={uiText("删除这个素材？")}
         locked={deleting}
         footer={
           <>
-            <button type="button" className="btn btn-quiet" data-close-dialog disabled={deleting}>取消</button>
-            <button type="button" className="btn btn-danger" onClick={remove} disabled={deleting}>{deleting ? '正在删除…' : '删除'}</button>
+            <button type="button" className="btn btn-quiet" data-close-dialog disabled={deleting}>{uiText("取消")}</button>
+            <button type="button" className="btn btn-danger" onClick={remove} disabled={deleting}>{deleting ? uiText("正在删除…") : uiText("删除")}</button>
           </>
         }
       >
-        <p>「{title}」的代码、截图和提示词会从素材库中一并删除，无法恢复。</p>
+        <p>「{title}{uiText("」的代码、截图和提示词会从素材库中一并删除，无法恢复。")}</p>
       </Dialog>
     </div>
   );
 }
 
 export function DetailError() {
+  useUi();
   const error = useRouteError();
   const missing = error instanceof ApiError && error.status === 404;
   return <div className="page-narrow"><div className="empty">
-    <p className="empty-title">{missing ? '这个素材不存在' : '素材没有加载出来'}</p>
-    <p className="empty-text">{missing ? '它可能已被删除，或者当前打开的是另一个素材库。' : errorMessage(error)}</p>
-    <Link to="/" className="btn">回到素材库</Link>
+    <p className="empty-title">{missing ? uiText("这个素材不存在") : uiText("素材没有加载出来")}</p>
+    <p className="empty-text">{missing ? uiText("它可能已被删除，或者当前打开的是另一个素材库。") : errorMessage(error)}</p>
+    <Link to="/" className="btn">{uiText("回到素材库")}</Link>
   </div></div>;
 }
 
 /** 动效参数和代码里的附注（许可、全局行为），不用翻代码就能看到 */
 function NotesPanel({ notes, locale }: { notes: ReturnType<typeof codeNotes>; locale: string }) {
+  useUi();
   const messages = language(locale).notes;
   return (
     <div className="notes" lang={locale} dir="auto">
@@ -319,6 +320,7 @@ function NotesPanel({ notes, locale }: { notes: ReturnType<typeof codeNotes>; lo
 }
 
 function MediaPanel({ asset, onChange }: { asset: AssetDetail; onChange: (a: AssetDetail) => void }) {
+  useUi();
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -334,14 +336,14 @@ function MediaPanel({ asset, onChange }: { asset: AssetDetail; onChange: (a: Ass
     let latest: AssetDetail | null = null;
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-        setError(`${file.name} 不是图片或视频，已跳过`);
+        setError(uiText("{{value0}} 不是图片或视频，已跳过", {value0: file.name}));
         continue;
       }
       setUploading(file.name);
       try {
         latest = await api.uploadMedia(asset.id, file, file.name);
       } catch (e) {
-        setError(`${file.name} 上传失败：${errorMessage(e)}`);
+        setError(uiText("{{value0}} 上传失败：{{value1}}", {value0: file.name,value1: errorMessage(e)}));
       }
     }
     setUploading(null);
@@ -372,8 +374,8 @@ function MediaPanel({ asset, onChange }: { asset: AssetDetail; onChange: (a: Ass
         onDrop={e => { e.preventDefault(); setDragging(false); void upload(e.dataTransfer.files); }}
       >
         <ImagePlus size={20} strokeWidth={1.6} aria-hidden="true" />
-        <p>{uploading ? `正在上传 ${uploading}…` : '拖入截图或录屏'}</p>
-        <button type="button" className="btn btn-sm" onClick={() => input.current?.click()} disabled={working}>选择文件</button>
+        <p>{uploading ? uiText("正在上传 {{value0}}…", {value0: uploading}) : uiText("拖入截图或录屏")}</p>
+        <button type="button" className="btn btn-sm" onClick={() => input.current?.click()} disabled={working}>{uiText("选择文件")}</button>
         <input ref={input} type="file" accept="image/*,video/*" multiple hidden onChange={e => { if (e.target.files) void upload(e.target.files); e.target.value = ''; }} />
       </div>
       {asset.media.length > 0 && (
@@ -393,6 +395,7 @@ function MediaPanel({ asset, onChange }: { asset: AssetDetail; onChange: (a: Ass
 function MediaItem({ file, isCover, disabled, onCover, onLabel, onDelete }: {
   file: AssetFile; isCover: boolean; disabled: boolean; onCover: () => void; onLabel: (label: string) => void; onDelete: () => void;
 }) {
+  useUi();
   const [label, setLabel] = useState(file.label);
   const name = file.path.slice(file.path.lastIndexOf('/') + 1);
   useEffect(() => setLabel(file.label), [file.label]);
@@ -401,17 +404,17 @@ function MediaItem({ file, isCover, disabled, onCover, onLabel, onDelete }: {
       <div className="media-thumb">
         {isImage(file.mime) ? <img src={fileUrl(file.path)} alt={file.label || name} loading="lazy" />
           : isVideo(file.mime) ? <video src={fileUrl(file.path)} muted loop playsInline controls preload="metadata" /> : null}
-        {isCover && <span className="cover-badge">封面</span>}
+        {isCover && <span className="cover-badge">{uiText("封面")}</span>}
       </div>
       <div className="media-info">
-        <input className="media-label" value={label} placeholder="添加说明" aria-label={`${name} 的说明`} disabled={disabled}
+        <input className="media-label" value={label} placeholder={uiText("添加说明")} aria-label={uiText("{{value0}} 的说明", {value0: name})} disabled={disabled}
           onChange={e => setLabel(e.target.value)}
           onBlur={() => label !== file.label && onLabel(label)}
           onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
         <div className="media-row">
           <span className="media-name" title={name}>{name}</span>
-          {isImage(file.mime) && !isCover && <button type="button" className="link-btn" disabled={disabled} onClick={onCover}><Star size={12} aria-hidden="true" />设为封面</button>}
-          <button type="button" className="link-btn link-danger" disabled={disabled} onClick={onDelete} aria-label={`删除 ${name}`}>删除</button>
+          {isImage(file.mime) && !isCover && <button type="button" className="link-btn" disabled={disabled} onClick={onCover}><Star size={12} aria-hidden="true" />{uiText("设为封面")}</button>}
+          <button type="button" className="link-btn link-danger" disabled={disabled} onClick={onDelete} aria-label={uiText("删除 {{value0}}", {value0: name})}>{uiText("删除")}</button>
         </div>
       </div>
     </li>

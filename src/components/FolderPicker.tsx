@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useEffect, useRef, useState } from 'react';
 import ArrowUp from 'lucide-react/icons/arrow-up';
 import Folder from 'lucide-react/icons/folder';
@@ -27,6 +28,7 @@ interface Props {
  * 可以直接粘贴路径跳转，也可以就地新建文件夹。
  */
 export function FolderPicker({ open, onClose, title, start, confirm, check, onPick }: Props) {
+  useUi();
   const [listing, setListing] = useState<DirListing | null>(null);
   const [typed, setTyped] = useState('');
   const [error, setError] = useState('');
@@ -75,40 +77,40 @@ export function FolderPicker({ open, onClose, title, start, confirm, check, onPi
     } finally { createBusy.current = false; setCreating(false); }
   };
 
-  const reason = listing ? typed.trim().toLowerCase() !== listing.path.toLowerCase() ? '按回车打开输入的路径'
-    : listing.path ? check?.(listing) ?? null : '先选一个磁盘里的文件夹' : '正在读取…';
+  const reason = listing ? typed.trim().toLowerCase() !== listing.path.toLowerCase() ? uiText("按回车打开输入的路径")
+    : listing.path ? check?.(listing) ?? null : uiText("先选一个磁盘里的文件夹") : uiText("正在读取…");
 
   return (
     <Dialog open={open} onClose={onClose} title={title} wide locked={creating}
       footer={<>
         <span className="picker-reason">{reason}</span>
-        <button type="button" className="btn btn-quiet" data-close-dialog>取消</button>
+        <button type="button" className="btn btn-quiet" data-close-dialog>{uiText("取消")}</button>
         <button type="button" className="btn btn-dark" disabled={!!reason || !!error || loading || creating} onClick={() => { onPick(listing!.path); onClose(); }}>{confirm}</button>
       </>}>
       <form className="picker-path" onSubmit={e => { e.preventDefault(); void go(typed.trim()); }}>
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="上一级" title="上一级" disabled={listing?.parent == null} onClick={() => void go(listing!.parent!)}><ArrowUp size={15} /></button>
-        <input value={typed} onChange={e => setTyped(e.target.value)} placeholder="此电脑" aria-label="文件夹路径，可以直接粘贴后回车" spellCheck={false} />
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="用户目录" title="用户目录" onClick={() => void go(listing?.home ?? '')}><Home size={15} /></button>
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="此电脑" title="此电脑" onClick={() => void go('')}><HardDrive size={15} /></button>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("上一级")} title={uiText("上一级")} disabled={listing?.parent == null} onClick={() => void go(listing!.parent!)}><ArrowUp size={15} /></button>
+        <input value={typed} onChange={e => setTyped(e.target.value)} placeholder={uiText("此电脑")} aria-label={uiText("文件夹路径，可以直接粘贴后回车")} spellCheck={false} />
+        <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("用户目录")} title={uiText("用户目录")} onClick={() => void go(listing?.home ?? '')}><Home size={15} /></button>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("此电脑")} title={uiText("此电脑")} onClick={() => void go('')}><HardDrive size={15} /></button>
       </form>
       <div className="picker-list" aria-busy={loading}>
         {listing?.entries.map(e => (
           <button key={e.path} type="button" className="picker-item" onClick={() => void go(e.path)}>
             {!listing.path ? <HardDrive size={16} /> : e.library ? <Library size={16} className="picker-lib" /> : <Folder size={16} />}
             <span>{e.name}</span>
-            {e.library && <small>素材库</small>}
+            {e.library && <small>{uiText("素材库")}</small>}
           </button>
         ))}
-        {listing && !listing.entries.length && <p className="picker-empty">没有子文件夹</p>}
+        {listing && !listing.entries.length && <p className="picker-empty">{uiText("没有子文件夹")}</p>}
       </div>
       <div className="picker-foot">
         {naming === null ? (
-          <button type="button" className="link-btn" disabled={!listing?.path} onClick={() => setNaming('')}><FolderPlus size={14} />新建文件夹</button>
+          <button type="button" className="link-btn" disabled={!listing?.path} onClick={() => setNaming('')}><FolderPlus size={14} />{uiText("新建文件夹")}</button>
         ) : (
           <form className="inline-form" onSubmit={e => { e.preventDefault(); void create(); }}>
-            <input autoFocus value={naming} onChange={e => setNaming(e.target.value)} placeholder="新文件夹名称" aria-label="新文件夹名称"
+            <input autoFocus value={naming} onChange={e => setNaming(e.target.value)} placeholder={uiText("新文件夹名称")} aria-label={uiText("新文件夹名称")}
               onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null); } }} />
-            <button type="submit" className="btn btn-sm" disabled={!naming.trim() || creating}>{creating ? '新建中…' : '新建'}</button>
+            <button type="submit" className="btn btn-sm" disabled={!naming.trim() || creating}>{creating ? uiText("新建中…") : uiText("新建")}</button>
           </form>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useNavigate, useParams } from 'react-router';
 import ArrowLeft from 'lucide-react/icons/arrow-left';
@@ -100,6 +101,7 @@ function themeKey(theme: ThemeContract | null | undefined): keyof typeof THEME_K
 }
 
 export function EditPage() {
+  useUi();
   const { id } = useParams();
   const editing = !!id;
   const navigate = useNavigate();
@@ -148,7 +150,7 @@ export function EditPage() {
         open(d);
         initialDraft.current = d;
         setInitial(JSON.stringify(d));
-      }).catch(e => { if (!controller.signal.aborted) setLoadError(e instanceof ApiError && e.status === 404 ? '这个素材不存在或已被删除' : errorMessage(e)); });
+      }).catch(e => { if (!controller.signal.aborted) setLoadError(e instanceof ApiError && e.status === 404 ? uiText("这个素材不存在或已被删除") : errorMessage(e)); });
       return () => controller.abort();
     }
     const fresh = emptyDraft();
@@ -189,7 +191,7 @@ export function EditPage() {
   const themeSupport = useMemo(() => resolveTheme(variant), [variant?.theme, variant?.files]);
 
   const draftPreview = useDraftPreview(variant ? {
-    title: draft?.title || '草稿', framework: variant.framework, entry: variant.entry, files: variant.files, theme: variant.theme,
+    title: draft?.title || uiText("草稿"), framework: variant.framework, entry: variant.entry, files: variant.files, theme: variant.theme,
   } : null);
   const previewUrl = draftPreview.url;
 
@@ -208,9 +210,9 @@ export function EditPage() {
     return (
       <div className="page-narrow">
         <div className="empty">
-          <p className="empty-title">素材没有加载出来</p>
+          <p className="empty-title">{uiText("素材没有加载出来")}</p>
           <p className="empty-text">{loadError}</p>
-          <Link to="/" className="btn">回到素材库</Link>
+          <Link to="/" className="btn">{uiText("回到素材库")}</Link>
         </div>
       </div>
     );
@@ -265,8 +267,8 @@ export function EditPage() {
 
   const addFile = () => {
     const clean = normalizeRelPath(fileName.trim());
-    if (!clean) { setFileError('填写有效的相对路径，如 components/Button.tsx'); return; }
-    if (variant.files.some(f => f.path.toLowerCase() === clean.toLowerCase())) { setFileError('已有同名文件，请换一个名称'); return; }
+    if (!clean) { setFileError(uiText("填写有效的相对路径，如 components/Button.tsx")); return; }
+    if (variant.files.some(f => f.path.toLowerCase() === clean.toLowerCase())) { setFileError(uiText("已有同名文件，请换一个名称")); return; }
     setVariant({ files: [...variant.files, { path: clean, content: '' }] });
     setActiveFile(clean);
     setFileDialog(false);
@@ -298,7 +300,7 @@ export function EditPage() {
   const applyPaste = () => {
     const parsed = parseReplicaPrompt(pasteText);
     if (!parsed) {
-      setPasteError('没有找到 HTML 代码。请粘贴 HTML 源码或带 HTML 代码块的复刻提示词；多文件组件请通过文件夹导入。');
+      setPasteError(uiText("没有找到 HTML 代码。请粘贴 HTML 源码或带 HTML 代码块的复刻提示词；多文件组件请通过文件夹导入。"));
       return;
     }
     const html: Draft['variants'][number] = {
@@ -324,7 +326,7 @@ export function EditPage() {
     setTextLocale('en');
     setPasteOpen(false);
     setPasteText('');
-    notify(`已填入「${parsed.title || '素材'}」`);
+    notify(uiText("已填入「{{value0}}」", {value0: parsed.title || '素材'}));
   };
 
   const createCategory = async () => {
@@ -368,7 +370,7 @@ export function EditPage() {
       saved.current = true;
       if (!editing) localStorage.removeItem(DRAFT_KEY);
       await refresh();
-      notify(editing ? '修改已保存' : `已添加「${result.title}」`);
+      notify(editing ? uiText("修改已保存") : uiText("已添加「{{value0}}」", {value0: result.title}));
       navigate(`/a/${result.id}`, { replace: true });
     } catch (err) {
       setSaveError(errorMessage(err));
@@ -389,31 +391,29 @@ export function EditPage() {
   return (
     <form className="studio editor" onSubmit={save} noValidate>
       <header className="studio-head">
-        <Link to={editing ? `/a/${id}` : '/'} className="icon-btn" aria-label="返回">
+        <Link to={editing ? `/a/${id}` : '/'} className="icon-btn" aria-label={uiText("返回")}>
           <ArrowLeft size={18} strokeWidth={1.8} aria-hidden="true" />
         </Link>
         <div className="studio-title">
-          <h1>{editing ? `编辑 ${draft.title}` : '添加素材'}</h1>
+          <h1>{editing ? uiText("编辑 {{value0}}", {value0: draft.title}) : uiText("添加素材")}</h1>
           {restored && !editing && (
-            <span className="studio-note">已恢复上次没保存的内容 · <button type="button" className="link-btn" onClick={discardDraft}>清空重来</button></span>
+            <span className="studio-note">{uiText("已恢复上次没保存的内容 · ")}<button type="button" className="link-btn" onClick={discardDraft}>{uiText("清空重来")}</button></span>
           )}
         </div>
         <div className="studio-actions">
           {saveError && <p className="form-error" role="alert">{saveError}</p>}
           {!editing && (
             <button type="button" className="btn btn-quiet" onClick={() => setPasteOpen(true)}>
-              <ClipboardPaste size={15} strokeWidth={1.8} aria-hidden="true" />
-              粘贴代码
-            </button>
+              <ClipboardPaste size={15} strokeWidth={1.8} aria-hidden="true" />{uiText(" 粘贴代码 ")}</button>
           )}
-          <Link to={editing ? `/a/${id}` : '/'} className="btn btn-quiet">取消</Link>
-          <button type="submit" className="btn btn-dark" disabled={saving}>{saving ? '正在保存…' : '保存'}</button>
+          <Link to={editing ? `/a/${id}` : '/'} className="btn btn-quiet">{uiText("取消")}</Link>
+          <button type="submit" className="btn btn-dark" disabled={saving}>{saving ? uiText("正在保存…") : uiText("保存")}</button>
         </div>
       </header>
 
-      <div className="workspace-tabs editor-tabs" role="tablist" aria-label="编辑内容" onKeyDown={handleTabKeys}>
+      <div className="workspace-tabs editor-tabs" role="tablist" aria-label={uiText("编辑内容")} onKeyDown={handleTabKeys}>
         <SelectionIndicator value={editorTab} underline />
-        {([{ value: 'code', label: '代码与预览' }, { value: 'info', label: '信息与提示词' }] as const).map(tab => (
+        {([{ value: 'code', label: uiText("代码与预览") }, { value: 'info', label: uiText("信息与提示词") }] as const).map(tab => (
           <button key={tab.value} type="button" role="tab" id={`editor-tab-${tab.value}`} aria-controls={`editor-panel-${tab.value}`}
             aria-selected={editorTab === tab.value} tabIndex={editorTab === tab.value ? 0 : -1} data-selection-item onClick={() => setEditorTab(tab.value)}>
             {tab.label}
@@ -424,7 +424,7 @@ export function EditPage() {
         <section className="editor-work" role="tabpanel" id="editor-panel-code" aria-labelledby="editor-tab-code" hidden={editorTab !== 'code'} inert={editorTab !== 'code'}>
           <div className="panel editor-code-panel">
             <div className="panel-bar">
-              <div className="fw-tabs" role="tablist" aria-label="实现" onKeyDown={handleTabKeys}>
+              <div className="fw-tabs" role="tablist" aria-label={uiText("实现")} onKeyDown={handleTabKeys}>
                 <SelectionIndicator value={variant.framework} itemsKey={draft.variants.map(v => v.framework).join('\0')} underline />
                 {draft.variants.map(v => (
                   <button key={v.framework} type="button" role="tab" aria-selected={v.framework === variant.framework} tabIndex={v.framework === variant.framework ? 0 : -1} onClick={() => showFramework(v.framework)} data-selection-item>
@@ -433,19 +433,19 @@ export function EditPage() {
                 ))}
               </div>
               {missingFrameworks.length > 0 && (
-                <SelectControl label="添加实现" placeholder="+ 添加实现" value="" onValueChange={addFramework}
+                <SelectControl label={uiText("添加实现")} placeholder={uiText("+ 添加实现")} value="" onValueChange={addFramework}
                   options={missingFrameworks.map(f => ({ value: f.id, label: f.label }))} />
               )}
             </div>
-            <div className="file-tabs" role="group" aria-label="代码文件">
-              <SelectControl label="代码文件" value={current?.path ?? ''} onValueChange={setActiveFile}
-                options={fileTabs.map(p => ({ value: p, label: info.fixed ? HTML_LABEL[p] ?? p : p, note: p === variant.entry ? '入口' : undefined }))} />
-              <span className="file-count">{fileTabs.length} 个文件</span>
-              <button type="button" className="icon-btn icon-btn-sm" aria-label="添加文件" title="添加文件" onClick={() => {
+            <div className="file-tabs" role="group" aria-label={uiText("代码文件")}>
+              <SelectControl label={uiText("代码文件")} value={current?.path ?? ''} onValueChange={setActiveFile}
+                options={fileTabs.map(p => ({ value: p, label: info.fixed ? HTML_LABEL[p] ?? p : p, note: p === variant.entry ? uiText("入口") : undefined }))} />
+              <span className="file-count">{fileTabs.length}{uiText(" 个文件")}</span>
+              <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("添加文件")} title={uiText("添加文件")} onClick={() => {
                 setFileName(''); setFileError(''); setFileDialog(true);
               }}><Plus size={15} aria-hidden="true" /></button>
               {current && !info.fixed?.includes(current.path) && current.path !== variant.entry &&
-                <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" aria-label={`删除文件 ${current.path}`} title="删除当前文件" onClick={() => removeFile(current.path)}><Trash2 size={14} aria-hidden="true" /></button>}
+                <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" aria-label={uiText("删除文件 {{value0}}", {value0: current.path})} title={uiText("删除当前文件")} onClick={() => removeFile(current.path)}><Trash2 size={14} aria-hidden="true" /></button>}
             </div>
             {current && (
               <textarea
@@ -462,56 +462,56 @@ export function EditPage() {
                 }}
                 spellCheck={false}
                 placeholder={info.fixed ? HTML_PLACEHOLDER[current.path] : ''}
-                aria-label={`编辑 ${current.path}`}
+                aria-label={uiText("编辑 {{value0}}", {value0: current.path})}
               />
             )}
             <details className="code-options">
-              <summary>实现设置</summary>
+              <summary>{uiText("实现设置")}</summary>
             {!info.fixed && (
               <div className="code-meta">
                 <label className="field">
-                  <span>入口文件 <small>默认导出组件</small></span>
-                  <SelectControl label="入口文件" fullWidth value={variant.entry} onValueChange={entry => setVariant({ entry })}
+                  <span>{uiText("入口文件 ")}<small>{uiText("默认导出组件")}</small></span>
+                  <SelectControl label={uiText("入口文件")} fullWidth value={variant.entry} onValueChange={entry => setVariant({ entry })}
                     options={variant.files.filter(f => info.entryExt.includes(f.path.split('.').pop()!)).map(f => ({ value: f.path, label: f.path }))} />
                 </label>
                 <label className="field">
-                  <span>依赖 <small>每行一个，如 motion@^12</small></span>
+                  <span>{uiText("依赖 ")}<small>{uiText("每行一个，如 motion@^12")}</small></span>
                   <textarea rows={2} value={variant.deps} onChange={e => setVariant({ deps: e.target.value })} spellCheck={false} className="mono" />
                 </label>
               </div>
             )}
-            <div className="theme-contract-editor" title="写明这份代码实际带了哪些配色，决定预览能否切换深浅色和提示词怎么写；不会改动代码">
-              <span>组件配色</span>
-              <SelectControl label="组件配色" value={themeKey(variant.theme)} onValueChange={value => setVariant({ theme: THEME_KEYS[value as keyof typeof THEME_KEYS] })}
+            <div className="theme-contract-editor" title={uiText("写明这份代码实际带了哪些配色，决定预览能否切换深浅色和提示词怎么写；不会改动代码")}>
+              <span>{uiText("组件配色")}</span>
+              <SelectControl label={uiText("组件配色")} value={themeKey(variant.theme)} onValueChange={value => setVariant({ theme: THEME_KEYS[value as keyof typeof THEME_KEYS] })}
                 options={[
-                  { value: 'legacy', label: '未确认 · 按原样预览' },
-                  { value: 'original', label: '一套固定配色' },
-                  { value: 'light', label: '只有浅色' },
-                  { value: 'dark', label: '只有深色' },
-                  { value: 'both-light', label: '浅色 + 深色 · 默认浅色' },
-                  { value: 'both-dark', label: '浅色 + 深色 · 默认深色' },
+                  { value: 'legacy', label: uiText("未确认 · 按原样预览") },
+                  { value: 'original', label: uiText("一套固定配色") },
+                  { value: 'light', label: uiText("只有浅色") },
+                  { value: 'dark', label: uiText("只有深色") },
+                  { value: 'both-light', label: uiText("浅色 + 深色 · 默认浅色") },
+                  { value: 'both-dark', label: uiText("浅色 + 深色 · 默认深色") },
                 ]} />
             </div>
-            {draft.variants.length > 1 && <button type="button" className="link-btn link-danger remove-implementation" onClick={() => setRemovingFramework(true)}>删除 {info.label} 实现</button>}
+            {draft.variants.length > 1 && <button type="button" className="link-btn link-danger remove-implementation" onClick={() => setRemovingFramework(true)}>{uiText("删除 ")}{info.label}{uiText(" 实现")}</button>}
             </details>
             <NotesPreview files={variant.files} framework={variant.framework} />
           </div>
           <DeviceWorkspace fullscreen={fullscreen.active} background={background} onBackgroundChange={setBackground}><div className="panel panel-preview editor-preview">
             <FullscreenFrame fullscreen={fullscreen}>
             <div className="panel-bar">
-              <ChoiceControl label="预览内容" value={previewTab} onChange={setPreviewTab}
-                options={[{ value: 'live', label: '实时预览' }, { value: 'card', label: '卡片外观', disabled: fullscreen.active }]} small />
+              <ChoiceControl label={uiText("预览内容")} value={previewTab} onChange={setPreviewTab}
+                options={[{ value: 'live', label: uiText("实时预览") }, { value: 'card', label: uiText("卡片外观"), disabled: fullscreen.active }]} small />
               {previewTab === 'live' && <AppearanceToggle value={appearance} onChange={setComponentTheme} support={themeSupport} />}
               <div className="panel-bar-right">
                 {previewTab === 'live' && <DeviceBackground />}
-                <button type="button" className="icon-btn" aria-label="重播" title="重播" onClick={() => setReloadKey(k => k + 1)}>
+                <button type="button" className="icon-btn" aria-label={uiText("重播")} title={uiText("重播")} onClick={() => setReloadKey(k => k + 1)}>
                   <RotateCcw size={16} strokeWidth={1.8} aria-hidden="true" />
                 </button>
               </div>
             </div>
             {draftPreview.error && <div className="workspace-feedback" role="alert">
-              <span><strong>预览未更新</strong>{draftPreview.error}</span>
-              <button type="button" className="btn btn-sm btn-quiet" disabled={draftPreview.pending} onClick={draftPreview.retry}>重试</button>
+              <span><strong>{uiText("预览未更新")}</strong>{draftPreview.error}</span>
+              <button type="button" className="btn btn-sm btn-quiet" disabled={draftPreview.pending} onClick={draftPreview.retry}>{uiText("重试")}</button>
             </div>}
             {previewTab === 'live' ? <>
               <div className="panel-subbar">
@@ -521,10 +521,10 @@ export function EditPage() {
               <div className={`preview-well preview-well-edit${background === 'dark' ? ' theme-dark' : ''}`}>
                 <PreviewLoading busy={draftPreview.pending} />
                 {previewUrl
-                  ? <DeviceCanvas active={editorTab === 'code'}>{(device, onBounds, framing) => <Stage src={previewUrl} title={draft.title || '草稿'} reloadKey={reloadKey} componentTheme={effectiveTheme} theme={background === 'dark' ? 'dark' : 'light'} active={editorTab === 'code'} device={device} framing={framing} onBounds={onBounds} />}</DeviceCanvas>
+                  ? <DeviceCanvas active={editorTab === 'code'}>{(device, onBounds, framing) => <Stage src={previewUrl} title={draft.title || uiText("草稿")} reloadKey={reloadKey} componentTheme={effectiveTheme} theme={background === 'dark' ? 'dark' : 'light'} active={editorTab === 'code'} device={device} framing={framing} onBounds={onBounds} />}</DeviceCanvas>
                   : variant.files.some(f => f.content.trim())
                     ? <div className="stage-host" aria-busy="true"><PreviewLoading /></div>
-                    : <p className="preview-empty">填入代码后在这里预览</p>}
+                    : <p className="preview-empty">{uiText("填入代码后在这里预览")}</p>}
               </div>
             </> : (
               <div className="card-look">
@@ -539,24 +539,24 @@ export function EditPage() {
 
         <section className="panel editor-info" role="tabpanel" id="editor-panel-info" aria-labelledby="editor-tab-info" hidden={editorTab !== 'info'} inert={editorTab !== 'info'}>
           <div className="editor-col editor-col-meta">
-            <div className="editor-col-head"><h2>基本信息</h2></div>
+            <div className="editor-col-head"><h2>{uiText("基本信息")}</h2></div>
             <div className="field-row field-row-even">
             <label className="field">
-              <span>默认名称</span>
+              <span>{uiText("默认名称")}</span>
               <input value={draft.title} onChange={e => set('title', e.target.value)} required maxLength={120} placeholder="Weather Day Switcher" />
             </label>
             <label className="field">
-              <span>分类</span>
+              <span>{uiText("分类")}</span>
               {newCategory === null ? (
-                <SelectControl label="分类" fullWidth value={draft.categoryId}
+                <SelectControl label={uiText("分类")} fullWidth value={draft.categoryId}
                   onValueChange={value => value === '__new' ? setNewCategory('') : set('categoryId', value)}
-                  options={[{ value: '', label: '未分类' }, ...categories.map(c => ({ value: c.id, label: c.name })), { value: '__new', label: '新建分类…' }]} />
+                  options={[{ value: '', label: uiText("未分类") }, ...categories.map(c => ({ value: c.id, label: c.name })), { value: '__new', label: uiText("新建分类…") }]} />
               ) : (
                 <span className="inline-create">
-                  <input autoFocus value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder="分类名称" maxLength={40}
+                  <input autoFocus value={newCategory} onChange={e => setNewCategory(e.target.value)} placeholder={uiText("分类名称")} maxLength={40}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void createCategory(); } if (e.key === 'Escape') setNewCategory(null); }} />
-                  <button type="button" className="btn btn-sm" onClick={createCategory}>添加</button>
-                  <button type="button" className="icon-btn" aria-label="取消新建分类" onClick={() => setNewCategory(null)}><X size={15} aria-hidden="true" /></button>
+                  <button type="button" className="btn btn-sm" onClick={createCategory}>{uiText("添加")}</button>
+                  <button type="button" className="icon-btn" aria-label={uiText("取消新建分类")} onClick={() => setNewCategory(null)}><X size={15} aria-hidden="true" /></button>
                 </span>
               )}
             </label>
@@ -564,16 +564,16 @@ export function EditPage() {
             {!editing && (
               <label className="field">
                 <span>ID <small>{playPath(draft.id.trim() || suggestedId || '…')}</small></span>
-                <input value={draft.id} onChange={e => set('id', e.target.value.toLowerCase())} placeholder={suggestedId || '留空时按名称生成'} pattern="[a-z0-9][a-z0-9\-]*" maxLength={64} spellCheck={false} className="mono" />
+                <input value={draft.id} onChange={e => set('id', e.target.value.toLowerCase())} placeholder={suggestedId || uiText("留空时按名称生成")} pattern="[a-z0-9][a-z0-9\-]*" maxLength={64} spellCheck={false} className="mono" />
               </label>
             )}
             <div className="field editor-tags-field">
-              <span id="tags-label">标签</span>
+              <span id="tags-label">{uiText("标签")}</span>
               <div className="tag-input" role="group" aria-labelledby="tags-label">
                 {draft.tags.map(t => (
                   <span key={t} className="tag-static">
                     {t}
-                    <button type="button" aria-label={`移除标签 ${t}`} onClick={() => set('tags', draft.tags.filter(x => x !== t))}><X size={11} aria-hidden="true" /></button>
+                    <button type="button" aria-label={uiText("移除标签 {{value0}}", {value0: t})} onClick={() => set('tags', draft.tags.filter(x => x !== t))}><X size={11} aria-hidden="true" /></button>
                   </span>
                 ))}
                 <input value={tagInput} onChange={e => setTagInput(e.target.value)}
@@ -582,10 +582,10 @@ export function EditPage() {
                     if (e.key === 'Enter' || e.key === ',' || e.key === '，') { e.preventDefault(); addTag(tagInput); }
                     if (e.key === 'Backspace' && !tagInput && draft.tags.length) set('tags', draft.tags.slice(0, -1));
                   }}
-                  onBlur={() => addTag(tagInput)} placeholder={draft.tags.length ? '' : '输入后回车'} aria-label="添加标签" />
+                  onBlur={() => addTag(tagInput)} placeholder={draft.tags.length ? '' : uiText("输入后回车")} aria-label={uiText("添加标签")} />
               </div>
               {tagSuggestions.length > 0 && (
-                <div className="tag-suggest" aria-label="已有标签">
+                <div className="tag-suggest" aria-label={uiText("已有标签")}>
                   {tagSuggestions.map(t => (
                     <button key={t.name} type="button" className="tag-chip" onMouseDown={e => e.preventDefault()} onClick={() => addTag(t.name)}>
                       <Plus size={11} strokeWidth={2.4} aria-hidden="true" />{t.name}
@@ -596,11 +596,11 @@ export function EditPage() {
             </div>
             <div className="field-row field-row-even">
               <label className="field">
-                <span>来源名称</span>
-                <input value={draft.sourceName} onChange={e => set('sourceName', e.target.value)} placeholder="作者、网站或项目名称（选填）" />
+                <span>{uiText("来源名称")}</span>
+                <input value={draft.sourceName} onChange={e => set('sourceName', e.target.value)} placeholder={uiText("作者、网站或项目名称（选填）")} />
               </label>
               <label className="field">
-                <span>来源地址</span>
+                <span>{uiText("来源地址")}</span>
                 <input value={draft.sourceUrl} onChange={e => set('sourceUrl', e.target.value)} placeholder="https://…" type="url" spellCheck={false} />
               </label>
             </div>
@@ -608,73 +608,73 @@ export function EditPage() {
           </div>
           <div className="editor-col editor-col-copy">
             <div className="editor-col-head">
-              <h2>文案</h2>
-              <LanguageControl label="文案语言" value={textLocale} onChange={setTextLocale}
+              <h2>{uiText("文案")}</h2>
+              <LanguageControl label={uiText("文案语言")} value={textLocale} onChange={setTextLocale}
                 options={contentLanguages(Object.keys(draft.texts))} />
             </div>
             <label className="field">
-              <span>名称 · {localeName(textLocale)}</span>
+              <span>{uiText("名称 · ")}{localeName(textLocale)}</span>
               <input lang={textLocale} dir="auto" value={text.title ?? ''} onChange={e => setText('title', e.target.value)} maxLength={120} placeholder={draft.title} />
             </label>
             <label className="field editor-summary-field">
-              <span>简介</span>
+              <span>{uiText("简介")}</span>
               <textarea lang={textLocale} dir="auto" rows={2} value={text.summary} onChange={e => setText('summary', e.target.value)} />
             </label>
           </div>
           <div className="editor-idea">
             <div className="editor-col-head editor-sub-head">
-              <h3>思路</h3>
-              <ChoiceControl label="思路版本" value={ideaTheme} onChange={setIdeaTheme} small options={[
-                { value: 'original', label: '通用' },
-                { value: 'light', label: '浅色' },
-                { value: 'dark', label: '深色' },
+              <h3>{uiText("思路")}</h3>
+              <ChoiceControl label={uiText("思路版本")} value={ideaTheme} onChange={setIdeaTheme} small options={[
+                { value: 'original', label: uiText("通用") },
+                { value: 'light', label: uiText("浅色") },
+                { value: 'dark', label: uiText("深色") },
               ]} />
             </div>
             <div className="editor-idea-fields">
             <label className="field">
-              <span>参照描述</span>
+              <span>{uiText("参照描述")}</span>
               <textarea lang={textLocale} dir="auto" rows={2} value={idea.reference} onChange={e => setIdea(composeIdea(e.target.value, idea.details))}
-                placeholder={ideaTheme === 'dark' ? '做一个深色的力扣提交热力图卡片。' : '做一个力扣风格的提交热力图卡片。'} />
+                placeholder={ideaTheme === 'dark' ? uiText("做一个深色的力扣提交热力图卡片。") : uiText("做一个力扣风格的提交热力图卡片。")} />
             </label>
             <label className="field">
-              <span>关键差异与交互</span>
+              <span>{uiText("关键差异与交互")}</span>
               <textarea lang={textLocale} dir="auto" rows={5} value={idea.details} onChange={e => setIdea(composeIdea(idea.reference, e.target.value))}
-                placeholder={'按月分块，月份写在下方。\n悬停格子显示日期和提交次数。'} />
+                placeholder={uiText("按月分块，月份写在下方。\n悬停格子显示日期和提交次数。")} />
             </label>
             </div>
           </div>
         </section>
       </div>
 
-      <Dialog open={fileDialog} onClose={() => setFileDialog(false)} title="添加文件"
-        footer={<><button type="button" className="btn btn-quiet" data-close-dialog>取消</button>
-          <button type="button" className="btn btn-dark" disabled={!fileName.trim()} onClick={addFile}>添加文件</button></>}>
-        <label className="field"><span>文件路径</span>
+      <Dialog open={fileDialog} onClose={() => setFileDialog(false)} title={uiText("添加文件")}
+        footer={<><button type="button" className="btn btn-quiet" data-close-dialog>{uiText("取消")}</button>
+          <button type="button" className="btn btn-dark" disabled={!fileName.trim()} onClick={addFile}>{uiText("添加文件")}</button></>}>
+        <label className="field"><span>{uiText("文件路径")}</span>
           <input autoFocus value={fileName} onChange={event => { setFileName(event.target.value); setFileError(''); }}
-            placeholder="如 components/Button.tsx" spellCheck={false} aria-invalid={!!fileError}
+            placeholder={uiText("如 components/Button.tsx")} spellCheck={false} aria-invalid={!!fileError}
             onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); addFile(); } }} />
         </label>
         {fileError && <p className="form-error" role="alert">{fileError}</p>}
       </Dialog>
-      <Dialog open={removingFramework} onClose={() => setRemovingFramework(false)} title={`删除 ${info.label} 实现？`}
-        footer={<><button type="button" className="btn btn-quiet" data-close-dialog>取消</button>
-          <button type="button" className="btn btn-danger" onClick={removeFramework}>删除实现</button></>}>
-        <p>这份实现的全部代码会从草稿中移除，其他框架保留。保存后生效。</p>
+      <Dialog open={removingFramework} onClose={() => setRemovingFramework(false)} title={uiText("删除 {{value0}} 实现？", {value0: info.label})}
+        footer={<><button type="button" className="btn btn-quiet" data-close-dialog>{uiText("取消")}</button>
+          <button type="button" className="btn btn-danger" onClick={removeFramework}>{uiText("删除实现")}</button></>}>
+        <p>{uiText("这份实现的全部代码会从草稿中移除，其他框架保留。保存后生效。")}</p>
       </Dialog>
       <Dialog
         open={pasteOpen}
         onClose={() => setPasteOpen(false)}
-        title="粘贴代码"
+        title={uiText("粘贴代码")}
         wide
         footer={
           <>
-            <button type="button" className="btn btn-quiet" data-close-dialog>取消</button>
-            <button type="button" className="btn btn-dark" onClick={applyPaste} disabled={!pasteText.trim()}>填入表单</button>
+            <button type="button" className="btn btn-quiet" data-close-dialog>{uiText("取消")}</button>
+            <button type="button" className="btn btn-dark" onClick={applyPaste} disabled={!pasteText.trim()}>{uiText("填入表单")}</button>
           </>
         }
       >
-        <p>粘贴 HTML 源码或带 HTML 代码的复刻提示词。能识别的名称、来源和代码会填入表单，保存前可以修改。</p>
-        <textarea className="paste-area" aria-label="HTML 代码或复刻提示词" value={pasteText} onChange={e => { setPasteText(e.target.value); setPasteError(''); }}
+        <p>{uiText("粘贴 HTML 源码或带 HTML 代码的复刻提示词。能识别的名称、来源和代码会填入表单，保存前可以修改。")}</p>
+        <textarea className="paste-area" aria-label={uiText("HTML 代码或复刻提示词")} value={pasteText} onChange={e => { setPasteText(e.target.value); setPasteError(''); }}
           placeholder={'<div class="card">…</div>\n<style>…</style>\n<script>…</script>'} spellCheck={false} autoFocus />
         {pasteError && <p className="form-error" role="alert">{pasteError}</p>}
       </Dialog>
@@ -682,15 +682,15 @@ export function EditPage() {
       <Dialog
         open={blocker.state === 'blocked'}
         onClose={() => blocker.state === 'blocked' && blocker.reset()}
-        title="放弃没保存的修改？"
+        title={uiText("放弃没保存的修改？")}
         footer={
           <>
-            <button type="button" className="btn btn-quiet" data-close-dialog>继续编辑</button>
-            <button type="button" className="btn btn-danger" onClick={() => blocker.state === 'blocked' && blocker.proceed()}>放弃修改</button>
+            <button type="button" className="btn btn-quiet" data-close-dialog>{uiText("继续编辑")}</button>
+            <button type="button" className="btn btn-danger" onClick={() => blocker.state === 'blocked' && blocker.proceed()}>{uiText("放弃修改")}</button>
           </>
         }
       >
-        <p>离开后，这次对「{draft.title || '素材'}」的修改不会保存。</p>
+        <p>{uiText("离开后，这次对「")}{draft.title || uiText("素材")}{uiText("」的修改不会保存。")}</p>
       </Dialog>
     </form>
   );
@@ -698,16 +698,17 @@ export function EditPage() {
 
 /** 和浏览页的卡片同样的结构和尺寸，保存前就能看到素材在列表里的样子 */
 function CardSample({ draft, locale, previewUrl, reloadKey }: { draft: Draft; locale: string; previewUrl: string | null; reloadKey: number }) {
+  useUi();
   const summary = pickText(draft, locale, 'summary');
   return (
-    <article className="card card-sample" aria-label="列表卡片预览">
+    <article className="card card-sample" aria-label={uiText("列表卡片预览")}>
       <div className="card-stage">
-        {previewUrl && <FitStage src={previewUrl} title="列表缩略图" viewport={draft.previewViewport} zoom={draft.previewScale}
+        {previewUrl && <FitStage src={previewUrl} title={uiText("列表缩略图")} viewport={draft.previewViewport} zoom={draft.previewScale}
           active={false} inert reloadKey={reloadKey} />}
       </div>
       <div className="card-meta">
         <span className="card-head">
-          <span className="card-title">{draft.title || '未命名素材'}</span>
+          <span className="card-title">{draft.title || uiText("未命名素材")}</span>
           <span className="card-fw">{draft.variants.map(v => frameworkInfo(v.framework)?.label).join(' · ')}</span>
         </span>
         {summary && <span className="card-sub">{summary}</span>}
@@ -727,11 +728,12 @@ function CardSample({ draft, locale, previewUrl, reloadKey }: { draft: Draft; lo
  * 以 Icons: / Touch: / Note: 等开头的注释、许可声明，以及 CSS 里的 @motion 参数块。
  */
 function NotesPreview({ files, framework }: { files: Draft['variants'][number]['files']; framework: string }) {
+  useUi();
   const [open, setOpen] = useState(false);
   const notes = useMemo(() => (open ? codeNotes({ framework, entry: '', dependencies: {}, files }) : null), [open, files, framework]);
   return (
     <details className="notes-preview" onToggle={e => setOpen(e.currentTarget.open)}>
-      <summary><span>说明</span><small>许可、备注与动效参数</small></summary>
+      <summary><span>{uiText("说明")}</span><small>{uiText("许可、备注与动效参数")}</small></summary>
       {notes && (
         <div className="notes-preview-body">
           {notes.notes.length || notes.motion.length ? (
@@ -739,13 +741,13 @@ function NotesPreview({ files, framework }: { files: Draft['variants'][number]['
               {notes.notes.map(n => <p key={n} className="notes-preview-note">{presentNote(n, 'zh').body}</p>)}
               {notes.motion.map(g => <p key={g.title} className="notes-preview-motion"><strong>{motionLabel(g.title, 'zh')}</strong>{g.params.map(p => motionLabel(p.label, 'zh')).join('、')}</p>)}
             </>
-          ) : <p className="muted">还没有可提取的注释。</p>}
+          ) : <p className="muted">{uiText("还没有可提取的注释。")}</p>}
           <div className="notes-preview-help">
-            <p>想在详情页显示说明，在代码里这样写注释：</p>
+            <p>{uiText("想在详情页显示说明，在代码里这样写注释：")}</p>
             <ul>
-              <li><code>{'/* Icons: Heroicons, MIT License */'}</code> 许可、来源</li>
-              <li><code>{'/* Touch: No hover on touch screens. | zh: 触屏上没有悬停效果 */'}</code> 使用时要注意的行为，也可以用 Note:；<code>| zh:</code> 后面写中文，详情页切到中文时显示</li>
-              <li>CSS 开头的 <code>{'/* @motion … */'}</code> 列出动效参数，值从 :root 里读；参数名同样可以加 <code>| zh: 中文名</code></li>
+              <li><code>{'/* Icons: Heroicons, MIT License */'}</code>{uiText(" 许可、来源")}</li>
+              <li><code>{'/* Touch: No hover on touch screens. | zh: 触屏上没有悬停效果 */'}</code>{uiText(" 使用时要注意的行为，也可以用 Note:；")}<code>| zh:</code>{uiText(" 后面写中文，详情页切到中文时显示")}</li>
+              <li>{uiText("CSS 开头的 ")}<code>{'/* @motion … */'}</code>{uiText(" 列出动效参数，值从 :root 里读；参数名同样可以加 ")}<code>{uiText("| zh: 中文名")}</code></li>
             </ul>
           </div>
         </div>

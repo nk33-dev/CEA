@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { PreviewBounds, PreviewDevice, PreviewFraming, PreviewLayout } from '../../shared/preview.ts';
 import { DEFAULT_DEVICE_VIEW, DeviceControl, DevicePreview, type DeviceView } from './DevicePreview.tsx';
@@ -28,6 +29,7 @@ function useWorkspace() {
 
 /** 旋转和缩放只更新订阅设备状态的控件与画布，不触发页面及复用内容重渲染。 */
 export function DeviceWorkspace({ children, ...appearance }: AppearanceProps & { children: ReactNode; fullscreen?: boolean }) {
+  useUi();
   const { state, fitScale } = useWorkspaceState(appearance);
   return <WorkspaceContext.Provider value={state}>
     <FitScaleContext.Provider value={fitScale}>{children}</FitScaleContext.Provider>
@@ -35,17 +37,20 @@ export function DeviceWorkspace({ children, ...appearance }: AppearanceProps & {
 }
 
 export function DeviceTools() {
+  useUi();
   const { view, setView, fullscreen } = useWorkspace();
-  if (fullscreen) return <span className="panel-label">全屏预览</span>;
+  if (fullscreen) return <span className="panel-label">{uiText("全屏预览")}</span>;
   return <DeviceControl view={view} onChange={setView} />;
 }
 
 export function DeviceBackground() {
+  useUi();
   const { background, onBackgroundChange } = useWorkspace();
   return <PreviewBackgroundToggle value={background} onChange={onBackgroundChange} />;
 }
 
 export function DeviceZoom({ children }: { children?: ReactNode }) {
+  useUi();
   const { view, setView } = useWorkspace();
   const fitScale = useContext(FitScaleContext);
   return <div className="preview-navigation"><ZoomControl value={view.zoom} fitScale={fitScale}
@@ -57,6 +62,7 @@ export function DeviceZoom({ children }: { children?: ReactNode }) {
 }
 
 export function DeviceCanvas({ active = true, children }: { active?: boolean; children: (device: PreviewDevice, onBounds: (bounds: PreviewBounds | null, layout?: PreviewLayout) => void, framing: PreviewFraming) => ReactNode }) {
+  useUi();
   const { view, setView, setFitScale, fullscreen } = useWorkspace();
   const [measurement, setMeasurement] = useState<{ bounds: PreviewBounds | null; layout?: PreviewLayout }>();
   const receiveBounds = useCallback((bounds: PreviewBounds | null, layout?: PreviewLayout) => setMeasurement({ bounds, layout }), []);

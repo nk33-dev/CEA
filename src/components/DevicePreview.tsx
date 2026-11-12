@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import BatteryFull from 'lucide-react/icons/battery-full';
 import ChevronDown from 'lucide-react/icons/chevron-down';
@@ -39,6 +40,7 @@ export function useDeviceViewport(view: DeviceView): PreviewViewport {
 export function DeviceControl({ view, onChange }: {
   view: DeviceView; onChange: (view: DeviceView) => void;
 }) {
+  useUi();
   const value = view.device;
   const [settings, setSettings] = useDeviceSettings();
   const viewport = settings.viewports[value];
@@ -58,7 +60,7 @@ export function DeviceControl({ view, onChange }: {
   };
   const updateViewport = (size: PreviewViewport) => {
     try { setSettings({ ...settings, viewports: { ...settings.viewports, [value]: { width: size.width, height: size.height } } }); setError(''); }
-    catch { setError('设置没有保存，请检查浏览器存储空间'); }
+    catch { setError(uiText("设置没有保存，请检查浏览器存储空间")); }
   };
   const apply = (save: boolean) => {
     if (!parsed.success || (save && !draft.name.trim())) return;
@@ -70,7 +72,7 @@ export function DeviceControl({ view, onChange }: {
       });
       setEditing(false);
       setError('');
-    } catch { setError('设置没有保存，请检查名称、预设数量和浏览器存储空间'); }
+    } catch { setError(uiText("设置没有保存，请检查名称、预设数量和浏览器存储空间")); }
   };
   const resize = (width: string, height: string, ratio = draft.ratio) => {
     const [a, b] = ratio.split(':').map(Number);
@@ -82,58 +84,58 @@ export function DeviceControl({ view, onChange }: {
   // 尺寸文字按交换后的实际宽高显示
   const size = (s: PreviewViewport) => view.swapped ? `${s.height} × ${s.width}` : `${s.width} × ${s.height}`;
   return <div className="device-controls">
-    <ChoiceControl label="预览设备" value={view.framing === 'content' ? 'content' : value} onChange={pick} options={[
-      { value: 'content', label: <><Scan size={14} aria-hidden="true" />组件</> },
-      { value: 'desktop', label: <><Monitor size={14} aria-hidden="true" />电脑</> },
-      { value: 'phone', label: <><Smartphone size={14} aria-hidden="true" />手机</> },
+    <ChoiceControl label={uiText("预览设备")} value={view.framing === 'content' ? 'content' : value} onChange={pick} options={[
+      { value: 'content', label: <><Scan size={14} aria-hidden="true" />{uiText("组件")}</> },
+      { value: 'desktop', label: <><Monitor size={14} aria-hidden="true" />{uiText("电脑")}</> },
+      { value: 'phone', label: <><Smartphone size={14} aria-hidden="true" />{uiText("手机")}</> },
     ]} />
     {view.framing !== 'content' && <>
-    <SelectControl label="设备尺寸" value={selected} onValueChange={id => {
+    <SelectControl label={uiText("设备尺寸")} value={selected} onValueChange={id => {
       if (id === 'swap') onChange({ ...view, swapped: !view.swapped });
       else if (id === 'custom') openEditor();
       else updateViewport(id === 'default' ? builtin : presets.find(p => p.id === id)!);
     }} options={[
-      { value: 'default', label: `默认 · ${size(builtin)}` },
+      { value: 'default', label: uiText("默认 · {{value0}}", {value0: size(builtin)}) },
       ...presets.map(p => ({ value: p.id, label: `${p.name} · ${size(p)}` })),
-      { value: 'custom', label: selected === 'custom' ? `自定义 · ${size(viewport)}` : '自定义尺寸…' },
-      { value: 'swap', label: '交换宽高', note: view.swapped ? '已交换' : undefined, separated: true },
+      { value: 'custom', label: selected === 'custom' ? uiText("自定义 · {{value0}}", {value0: size(viewport)}) : uiText("自定义尺寸…") },
+      { value: 'swap', label: uiText("交换宽高"), note: view.swapped ? uiText("已交换") : undefined, separated: true },
     ]} />
     <RotateControl view={view} onChange={onChange} />
-    <button type="button" className="icon-btn icon-btn-sm" aria-label="预览设置" title="预览设置" onClick={openEditor}><SlidersHorizontal size={15} aria-hidden="true" /></button>
+    <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("预览设置")} title={uiText("预览设置")} onClick={openEditor}><SlidersHorizontal size={15} aria-hidden="true" /></button>
     </>}
     {!editing && error && <span className="form-error" role="alert">{error}</span>}
-    <Dialog open={editing} onClose={() => setEditing(false)} title="预览设置" footer={<>
-      <button type="button" className="btn btn-quiet" disabled={!parsed.success} onClick={() => apply(false)}>应用尺寸</button>
-      <button type="button" className="btn btn-dark" disabled={!parsed.success || !draft.name.trim()} onClick={() => apply(true)}>{draft.id ? '更新预设' : '保存预设'}</button>
+    <Dialog open={editing} onClose={() => setEditing(false)} title={uiText("预览设置")} footer={<>
+      <button type="button" className="btn btn-quiet" disabled={!parsed.success} onClick={() => apply(false)}>{uiText("应用尺寸")}</button>
+      <button type="button" className="btn btn-dark" disabled={!parsed.success || !draft.name.trim()} onClick={() => apply(true)}>{draft.id ? uiText("更新预设") : uiText("保存预设")}</button>
     </>}>
       <div className="device-size-form">
         <div className="device-size-fields">
-          <label className="field"><span>宽度</span><input type="number" min="240" max="3840" step="1" value={draft.width}
+          <label className="field"><span>{uiText("宽度")}</span><input type="number" min="240" max="3840" step="1" value={draft.width}
             onChange={e => resize(e.target.value, draft.height)} /></label>
           <span className="device-size-times" aria-hidden="true">×</span>
-          <label className="field"><span>高度</span><input type="number" min="240" max="3840" step="1" value={draft.height}
+          <label className="field"><span>{uiText("高度")}</span><input type="number" min="240" max="3840" step="1" value={draft.height}
             onChange={e => setDraft({ ...draft, height: e.target.value, ratio: 'free' })} /></label>
         </div>
-        <label className="field"><span>屏幕比例</span><SelectControl label="屏幕比例" value={draft.ratio}
+        <label className="field"><span>{uiText("屏幕比例")}</span><SelectControl label={uiText("屏幕比例")} value={draft.ratio}
           onValueChange={ratio => resize(draft.width, draft.height, ratio)} fullWidth options={[
-            { value: 'free', label: '自由尺寸' }, { value: '9:16', label: '9 : 16' }, { value: '9:19.5', label: '9 : 19.5' },
+            { value: 'free', label: uiText("自由尺寸") }, { value: '9:16', label: '9 : 16' }, { value: '9:19.5', label: '9 : 19.5' },
             { value: '3:4', label: '3 : 4' }, { value: '16:9', label: '16 : 9' },
           ]} /></label>
-        <label className="field"><span>预设名称</span><input value={draft.name} maxLength={40} placeholder="如 我的手机"
+        <label className="field"><span>{uiText("预设名称")}</span><input value={draft.name} maxLength={40} placeholder={uiText("如 我的手机")}
           onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
-        {!parsed.success && <p className="form-error" role="alert">宽高范围为 240–3840，使用整数。</p>}
+        {!parsed.success && <p className="form-error" role="alert">{uiText("宽高范围为 240–3840，使用整数。")}</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
         {presets.length > 0 && <div className="device-saved-presets">
-          <h3>已保存的{value === 'phone' ? '手机' : '电脑'}尺寸</h3>
+          <h3>{uiText("已保存的")}{value === 'phone' ? uiText("手机") : uiText("电脑")}{uiText("尺寸")}</h3>
           {presets.map(p => <div className="device-preset-row" key={p.id}>
             <button type="button" className="device-preset-edit" onClick={() => setDraft({ id: p.id, name: p.name, width: String(p.width), height: String(p.height), ratio: 'free' })}>
               <span>{p.name}</span><small>{p.width} × {p.height}</small>
             </button>
-            <button type="button" className="icon-btn icon-btn-sm" aria-label={`移除预设 ${p.name}`} title="移除预设" onClick={() => {
+            <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("移除预设 {{value0}}", {value0: p.name})} title={uiText("移除预设")} onClick={() => {
               try {
                 setSettings({ ...settings, presets: settings.presets.filter(item => item.id !== p.id) });
                 if (draft.id === p.id) setDraft({ ...draft, id: '', name: '' });
-              } catch { setError('预设没有移除，请检查浏览器存储空间'); }
+              } catch { setError(uiText("预设没有移除，请检查浏览器存储空间")); }
             }}><Trash2 size={14} /></button>
           </div>)}
         </div>}
@@ -178,6 +180,7 @@ export function DevicePreview({ view, fullscreen = false, active = true, bounds,
   onZoomChange?: (zoom: number) => void;
   children: React.ReactNode;
 }) {
+  useUi();
   return <TransformWrapper minScale={0.05} maxScale={MAX_ZOOM} centerZoomedOut disablePadding smooth={false}
     doubleClick={{ disabled: true }} velocityAnimation={{ disabled: true }}
     autoAlignment={{ disabled: true, animationTime: 0 }} zoomAnimation={{ disabled: true }}
@@ -199,6 +202,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds: reporte
   onFitScale?: (scale: number) => void;
   children: React.ReactNode;
 }) {
+  useUi();
   const controls = useControls();
   const transform = useTransformComponent(({ state }) => ({ scale: state.scale, x: state.positionX, y: state.positionY }));
   const deviceViewport = useDeviceViewport(view);
@@ -483,6 +487,7 @@ function reducedMotion() {
 
 /** 装饰状态栏不占页面高度，也不遮挡 iframe 中的控件。 */
 function PhoneStatus({ landscape }: { landscape: boolean }) {
+  useUi();
   return <div className="phone-status" aria-hidden="true">
     {!landscape && <>
     <span className="phone-time">9:41</span>
@@ -496,6 +501,7 @@ function PhoneStatus({ landscape }: { landscape: boolean }) {
  * 「画面自动转正」开启时和真机一样，转过 45° 画面跟着转正并按横屏排版；关闭时画面和设备一起转。
  */
 function RotateControl({ view, onChange }: { view: DeviceView; onChange: (view: DeviceView) => void }) {
+  useUi();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -542,19 +548,19 @@ function RotateControl({ view, onChange }: { view: DeviceView; onChange: (view: 
   const turnBy = (delta: number) => onChange({ ...view, angle: view.angle + delta, rotating: false });
   return <div className="rotate-control" ref={wrap}>
     <div className="rotate-shortcut">
-      <button type="button" className="icon-btn icon-btn-sm" aria-label="向右旋转设备 90°" title="向右旋转 90°"
+      <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("向右旋转设备 90°")} title={uiText("向右旋转 90°")}
         onClick={() => turnBy(90)}><RotateCwSquare size={15} aria-hidden="true" /></button>
-      <button ref={trigger} type="button" className="icon-btn icon-btn-sm rotate-expand" aria-label="旋转设置" title="旋转设置" aria-expanded={open}
+      <button ref={trigger} type="button" className="icon-btn icon-btn-sm rotate-expand" aria-label={uiText("旋转设置")} title={uiText("旋转设置")} aria-expanded={open}
         onClick={() => setOpen(o => !o)}><ChevronDown size={12} aria-hidden="true" /></button>
     </div>
-    {open && <div ref={popup} className="rotate-pop option-surface" style={{ marginLeft: shift }} role="group" aria-label="旋转设备">
+    {open && <div ref={popup} className="rotate-pop option-surface" style={{ marginLeft: shift }} role="group" aria-label={uiText("旋转设备")}>
       <div className="rotate-head">
-        <span>旋转</span>
+        <span>{uiText("旋转")}</span>
         <output className="rotate-angle">{shown}°</output>
       </div>
       <div className="rotate-row">
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="向左转 90°" title="向左转 90°" onClick={() => turnBy(-90)}><RotateCcw size={15} aria-hidden="true" /></button>
-        <input type="range" className="rotate-range" min={-180} max={180} step={1} value={shown} aria-label="旋转角度"
+        <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("向左转 90°")} title={uiText("向左转 90°")} onClick={() => turnBy(-90)}><RotateCcw size={15} aria-hidden="true" /></button>
+        <input type="range" className="rotate-range" min={-180} max={180} step={1} value={shown} aria-label={uiText("旋转角度")}
           onPointerDown={() => onChange({ ...view, rotating: true })}
           onPointerUp={finish} onPointerCancel={finish} onBlur={finish} onKeyUp={finish}
           onChange={e => {
@@ -570,13 +576,13 @@ function RotateControl({ view, onChange }: { view: DeviceView; onChange: (view: 
               state.onChange({ ...state.view, angle: pendingAngle.current ?? state.view.angle, rotating: true });
             });
           }} />
-        <button type="button" className="icon-btn icon-btn-sm" aria-label="向右转 90°" title="向右转 90°" onClick={() => turnBy(90)}><RotateCw size={15} aria-hidden="true" /></button>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label={uiText("向右转 90°")} title={uiText("向右转 90°")} onClick={() => turnBy(90)}><RotateCw size={15} aria-hidden="true" /></button>
       </div>
       <label className="rotate-auto">
         <input type="checkbox" checked={view.autoRotate} onChange={e => onChange({ ...view, autoRotate: e.target.checked })} />
-        <span>画面自动转正</span>
+        <span>{uiText("画面自动转正")}</span>
       </label>
-      <button type="button" className="rotate-reset" disabled={shown === 0} onClick={() => turnBy(-shown)}>回正</button>
+      <button type="button" className="rotate-reset" disabled={shown === 0} onClick={() => turnBy(-shown)}>{uiText("回正")}</button>
     </div>}
   </div>;
 }

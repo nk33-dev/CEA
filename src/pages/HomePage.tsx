@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import ArrowDownUp from 'lucide-react/icons/arrow-down-up';
@@ -37,6 +38,7 @@ const facetCount = (counts: Record<string, number> | undefined, name: string) =>
   counts && Object.hasOwn(counts, name) ? counts[name] : 0;
 
 export function HomePage() {
+  useUi();
   const { categories, tags, revision, notify, refresh, info } = useLibrary();
   const [params, setParams] = useSearchParams();
   const key = params.toString();
@@ -135,7 +137,7 @@ export function HomePage() {
   const toggleTag = useCallback((tag: string) => {
     const next = selectedTags.some(t => t.toLowerCase() === tag.toLowerCase())
       ? selectedTags.filter(t => t.toLowerCase() !== tag.toLowerCase()) : [...selectedTags, tag];
-    if (next.length > 30) { notify('最多同时筛选 30 个标签'); return; }
+    if (next.length > 30) { notify(uiText("最多同时筛选 30 个标签")); return; }
     update({ tags: writeTagQuery(next) });
   }, [selectedTags, update, notify]);
   const onFavorite = useCallback((id: string, saved: boolean) => {
@@ -158,19 +160,19 @@ export function HomePage() {
     finally { setBusy(false); }
   };
   const exportSelected = async () => {
-    if (await run(() => api.exportZip([...selected]), `已导出 ${selected.size} 个组件`)) exitSelect();
+    if (await run(() => api.exportZip([...selected]), uiText("已导出 {{value0}} 个组件", {value0: selected.size}))) exitSelect();
   };
   const apply = async () => {
     if (!action) return;
-    if (await run(() => api.manageAssets([...selected], action, value), `已处理 ${selected.size} 个组件`)) {
+    if (await run(() => api.manageAssets([...selected], action, value), uiText("已处理 {{value0}} 个组件", {value0: selected.size}))) {
       setAction(null); exitSelect();
     }
   };
   const clear = () => { setQuery(''); update({ q: null, category: null, fw: null, tags: null, fav: null }); };
   const active = [
     ...(q ? [{ key: 'q', label: q, clear: () => { setQuery(''); update({ q: null }); } }] : []),
-    ...(favorite ? [{ key: 'fav', label: '收藏', clear: () => update({ fav: null }) }] : []),
-    ...(category ? [{ key: 'cat', label: (() => { const c = categories.find(c => c.id === category); return c ? localizedName(c.name, c.labels, locale) : '分类'; })(), clear: () => update({ category: null }) }] : []),
+    ...(favorite ? [{ key: 'fav', label: uiText("收藏"), clear: () => update({ fav: null }) }] : []),
+    ...(category ? [{ key: 'cat', label: (() => { const c = categories.find(c => c.id === category); return c ? localizedName(c.name, c.labels, locale) : uiText("分类"); })(), clear: () => update({ category: null }) }] : []),
     ...(fw ? [{ key: 'fw', label: frameworkLabel(fw), clear: () => update({ fw: null }) }] : []),
     ...selectedTags.map(t => ({ key: `tag:${t}`, label: '#' + localizedName(t, tags.find(tag => tag.name.toLowerCase() === t.toLowerCase())?.labels, locale), clear: () => toggleTag(t) })),
   ];
@@ -190,69 +192,69 @@ export function HomePage() {
     <PreviewActivity><div className="home">
       <div className="results-bar">
         <label className="search"><Search size={16} aria-hidden="true" />
-          <input ref={search} type="search" placeholder="搜索组件、标签或交互" aria-label="搜索组件" value={query} onChange={e => setQuery(e.target.value)}
+          <input ref={search} type="search" placeholder={uiText("搜索组件、标签或交互")} aria-label={uiText("搜索组件")} value={query} onChange={e => setQuery(e.target.value)}
             onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} />
-          {query ? <button className="search-clear" aria-label="清空搜索" onClick={() => setQuery('')}><X size={14} /></button> : <kbd>Ctrl K</kbd>}
+          {query ? <button className="search-clear" aria-label={uiText("清空搜索")} onClick={() => setQuery('')}><X size={14} /></button> : <kbd>Ctrl K</kbd>}
         </label>
         <ContentLanguage />
-        <button className={`btn btn-quiet${selecting ? ' is-active' : ''}`} onClick={() => selecting ? exitSelect() : setSelecting(true)} aria-pressed={selecting}>{selecting ? '完成' : '批量管理'}</button>
-        <Link to="/new" className="btn btn-dark"><Plus size={16} />添加</Link>
+        <button className={`btn btn-quiet${selecting ? ' is-active' : ''}`} onClick={() => selecting ? exitSelect() : setSelecting(true)} aria-pressed={selecting}>{selecting ? uiText("完成") : uiText("批量管理")}</button>
+        <Link to="/new" className="btn btn-dark"><Plus size={16} />{uiText("添加")}</Link>
       </div>
-      <div className="filter-bar" aria-label="筛选">
-        <button className="fmenu-btn" aria-pressed={favorite} onClick={() => update({ fav: favorite ? null : '1' })}><Heart size={14} />收藏<span className="count">{facets?.favorite ?? 0}</span></button>
-        <FilterMenu label="分类" selected={category ? [category] : []} onChange={v => update({ category: v[0] ?? null })}
-          options={[{ value: '__uncategorized__', label: '未分类', count: facetCount(facets?.categories, 'null') }, ...categories.map(c => ({ value: c.id, label: localizedName(c.name, c.labels, locale), search: [c.name, ...Object.values(c.labels ?? {})].join(' '), count: facetCount(facets?.categories, c.id) }))]}
-          footer={<Link to="/organize?tab=categories" className="link-btn">管理分类</Link>} />
-        <FilterMenu label="框架" selected={fw ? [fw] : []} onChange={v => update({ fw: v[0] ?? null })}
+      <div className="filter-bar" aria-label={uiText("筛选")}>
+        <button className="fmenu-btn" aria-pressed={favorite} onClick={() => update({ fav: favorite ? null : '1' })}><Heart size={14} />{uiText("收藏")}<span className="count">{facets?.favorite ?? 0}</span></button>
+        <FilterMenu label={uiText("分类")} selected={category ? [category] : []} onChange={v => update({ category: v[0] ?? null })}
+          options={[{ value: '__uncategorized__', label: uiText("未分类"), count: facetCount(facets?.categories, 'null') }, ...categories.map(c => ({ value: c.id, label: localizedName(c.name, c.labels, locale), search: [c.name, ...Object.values(c.labels ?? {})].join(' '), count: facetCount(facets?.categories, c.id) }))]}
+          footer={<Link to="/organize?tab=categories" className="link-btn">{uiText("管理分类")}</Link>} />
+        <FilterMenu label={uiText("框架")} selected={fw ? [fw] : []} onChange={v => update({ fw: v[0] ?? null })}
           options={FRAMEWORKS.map(f => ({ value: f.id, label: f.label, count: facetCount(facets?.frameworks, f.id) }))} />
-        <FilterMenu label="标签" multiple selected={selectedTags} onChange={v => { if (v.length > 30) notify('最多同时筛选 30 个标签'); else update({ tags: writeTagQuery(v) }); }}
+        <FilterMenu label={uiText("标签")} multiple selected={selectedTags} onChange={v => { if (v.length > 30) notify(uiText("最多同时筛选 30 个标签")); else update({ tags: writeTagQuery(v) }); }}
           options={tagOptions}
-          footer={<Link to="/organize" className="link-btn">管理标签</Link>} />
+          footer={<Link to="/organize" className="link-btn">{uiText("管理标签")}</Link>} />
         <div className="filter-results">
-          <span className="active-count" role="status" aria-live="polite">{data?.total ?? 0} 个组件</span>
+          <span className="active-count" role="status" aria-live="polite">{data?.total ?? 0}{uiText(" 个组件")}</span>
           <div className="sort-control">
-          <SelectControl label="排序" value={SORTS.some(s => s.value === sort) ? sort : 'updated'} onValueChange={v => update({ sort: v })}
-            options={SORTS} filter icon={<ArrowDownUp size={14} />} />
+          <SelectControl label={uiText("排序")} value={SORTS.some(s => s.value === sort) ? sort : 'updated'} onValueChange={v => update({ sort: v })}
+            options={SORTS.map(option => ({ ...option, label: uiText(option.label) }))} filter icon={<ArrowDownUp size={14} />} />
           </div>
         </div>
       </div>
       {active.length > 0 && <div className="active-filters">
-        {active.map(f => <button key={f.key} className="active-chip" aria-label={`移除筛选：${f.label}`} onClick={f.clear}>{f.label}<X size={12} /></button>)}
-        {active.length > 0 && <button className="link-btn" onClick={clear}>清除筛选</button>}
+        {active.map(f => <button key={f.key} className="active-chip" aria-label={uiText("移除筛选：{{value0}}", {value0: f.label})} onClick={f.clear}>{f.label}<X size={12} /></button>)}
+        {active.length > 0 && <button className="link-btn" onClick={clear}>{uiText("清除筛选")}</button>}
       </div>}
       <PreviewActivityStatus fetching={loading} />
       {error && data && <div className="workspace-feedback" role="alert">
-        <span><strong>列表未更新</strong>{error}</span>
-        <button type="button" className="btn btn-sm btn-quiet" onClick={() => setRetry(value => value + 1)}>重试</button>
+        <span><strong>{uiText("列表未更新")}</strong>{error}</span>
+        <button type="button" className="btn btn-sm btn-quiet" onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</button>
       </div>}
-      <section ref={results} className="results" aria-label="组件" aria-busy={loading}>
-        {error && !data ? <div className="empty" role="alert"><p>{error}</p><button className="btn" onClick={() => setRetry(value => value + 1)}>重试</button></div>
+      <section ref={results} className="results" aria-label={uiText("组件")} aria-busy={loading}>
+        {error && !data ? <div className="empty" role="alert"><p>{error}</p><button className="btn" onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</button></div>
           : !data ? <div className="grid">{[0, 1, 2].map(i => <div key={i} className="card card-skeleton"><div className="card-stage" /></div>)}</div>
-          : !info?.assetCount ? <div className="empty"><p className="empty-title">开始你的组件收藏</p><div className="empty-actions">
-            <Link to="/new" className="btn btn-dark">添加组件</Link><Link to="/transfer" className="btn btn-quiet">导入组件</Link>
+          : !info?.assetCount ? <div className="empty"><p className="empty-title">{uiText("开始你的组件收藏")}</p><div className="empty-actions">
+            <Link to="/new" className="btn btn-dark">{uiText("添加组件")}</Link><Link to="/transfer" className="btn btn-quiet">{uiText("导入组件")}</Link>
           </div></div>
-          : !items.length ? <div className="empty"><p className="empty-title">没有匹配的组件</p><button className="btn" onClick={clear}>清除筛选</button></div>
+          : !items.length ? <div className="empty"><p className="empty-title">{uiText("没有匹配的组件")}</p><button className="btn" onClick={clear}>{uiText("清除筛选")}</button></div>
           : <AssetGrid key={info.libraryId} items={items}>{a => <AssetCard asset={a} live={liveId === a.id} onLiveChange={setLiveId} locale={locale} tagLabels={tagLabels} activeTags={tagSet} selecting={selecting} selected={selected.has(a.id)} onToggleSelect={toggleSelect} onFavorite={onFavorite} onTag={toggleTag} onDelete={askDelete} />}</AssetGrid>}
       </section>
-      {pages > 1 && <nav className="pagination" aria-label="分页">
-        <button className="icon-btn" title="上一页" aria-label="上一页" disabled={page <= 1 || loading} onClick={() => changePage(page - 1)}><ChevronLeft size={18} /></button>
+      {pages > 1 && <nav className="pagination" aria-label={uiText("分页")}>
+        <button className="icon-btn" title={uiText("上一页")} aria-label={uiText("上一页")} disabled={page <= 1 || loading} onClick={() => changePage(page - 1)}><ChevronLeft size={18} /></button>
         <span>{page} / {pages}</span>
-        <button className="icon-btn" title="下一页" aria-label="下一页" disabled={page >= pages || loading} onClick={() => changePage(page + 1)}><ChevronRight size={18} /></button>
+        <button className="icon-btn" title={uiText("下一页")} aria-label={uiText("下一页")} disabled={page >= pages || loading} onClick={() => changePage(page + 1)}><ChevronRight size={18} /></button>
       </nav>}
-      {selecting && <div className="select-bar batch-bar" aria-label="批量管理">
-        <span>已选 {selected.size}</span><button className="btn btn-quiet btn-sm" onClick={() => setSelected(prev => { const next = new Set(prev); for (const a of items) pageSelected ? next.delete(a.id) : next.add(a.id); return next; })}>{pageSelected ? '取消本页' : '选择本页'}</button>
-        <button className="icon-btn" title="导出所选" aria-label="导出所选" disabled={!selected.size || busy} onClick={exportSelected}><Download size={16} /></button>
-        <button className="icon-btn" title="添加标签" aria-label="添加标签" disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('tag'); }}><Tags size={16} /></button>
-        <button className="icon-btn" title="移除标签" aria-label="移除标签" disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('untag'); }}><TagMinus size={16} /></button>
-        <button className="icon-btn" title="移动分类" aria-label="移动分类" disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('category'); }}><FolderInput size={16} /></button>
-        <button className="icon-btn icon-btn-danger" title="删除所选" aria-label="删除所选" disabled={!selected.size || busy} onClick={() => setAction('delete')}><Trash2 size={16} /></button>
+      {selecting && <div className="select-bar batch-bar" aria-label={uiText("批量管理")}>
+        <span>{uiText("已选 ")}{selected.size}</span><button className="btn btn-quiet btn-sm" onClick={() => setSelected(prev => { const next = new Set(prev); for (const a of items) pageSelected ? next.delete(a.id) : next.add(a.id); return next; })}>{pageSelected ? uiText("取消本页") : uiText("选择本页")}</button>
+        <button className="icon-btn" title={uiText("导出所选")} aria-label={uiText("导出所选")} disabled={!selected.size || busy} onClick={exportSelected}><Download size={16} /></button>
+        <button className="icon-btn" title={uiText("添加标签")} aria-label={uiText("添加标签")} disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('tag'); }}><Tags size={16} /></button>
+        <button className="icon-btn" title={uiText("移除标签")} aria-label={uiText("移除标签")} disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('untag'); }}><TagMinus size={16} /></button>
+        <button className="icon-btn" title={uiText("移动分类")} aria-label={uiText("移动分类")} disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('category'); }}><FolderInput size={16} /></button>
+        <button className="icon-btn icon-btn-danger" title={uiText("删除所选")} aria-label={uiText("删除所选")} disabled={!selected.size || busy} onClick={() => setAction('delete')}><Trash2 size={16} /></button>
       </div>}
-      <Dialog open={!!action} onClose={() => setAction(null)} locked={busy} title={action === 'delete' ? `删除 ${selected.size} 个组件？` : action === 'tag' ? '添加标签' : action === 'untag' ? '移除标签' : '移动分类'}
-        footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>取消</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || ((action === 'tag' || action === 'untag') && !value.trim())} onClick={apply}>{busy ? '处理中…' : action === 'delete' ? '删除' : '应用'}</button></>}>
-        {action === 'delete' ? <p>组件的代码、截图和提示词会一并删除，无法恢复。</p>
-          : action === 'tag' || action === 'untag' ? <label className="field"><span>标签名称</span><input value={value} onChange={e => setValue(e.target.value)} maxLength={30} autoFocus list="asset-tag-names" /><datalist id="asset-tag-names">{tags.map(tag => <option key={tag.name} value={tag.name}>{localizedName(tag.name, tag.labels, locale)}</option>)}</datalist></label>
-          : <label className="field"><span>分类</span><SelectControl label="移动到分类" fullWidth value={value} onValueChange={setValue}
-            options={[{ value: '', label: '未分类' }, ...categories.map(c => ({ value: c.id, label: c.name }))]} /></label>}
+      <Dialog open={!!action} onClose={() => setAction(null)} locked={busy} title={action === 'delete' ? uiText("删除 {{value0}} 个组件？", {value0: selected.size}) : action === 'tag' ? uiText("添加标签") : action === 'untag' ? uiText("移除标签") : uiText("移动分类")}
+        footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>{uiText("取消")}</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || ((action === 'tag' || action === 'untag') && !value.trim())} onClick={apply}>{busy ? uiText("处理中…") : action === 'delete' ? uiText("删除") : uiText("应用")}</button></>}>
+        {action === 'delete' ? <p>{uiText("组件的代码、截图和提示词会一并删除，无法恢复。")}</p>
+          : action === 'tag' || action === 'untag' ? <label className="field"><span>{uiText("标签名称")}</span><input value={value} onChange={e => setValue(e.target.value)} maxLength={30} autoFocus list="asset-tag-names" /><datalist id="asset-tag-names">{tags.map(tag => <option key={tag.name} value={tag.name}>{localizedName(tag.name, tag.labels, locale)}</option>)}</datalist></label>
+          : <label className="field"><span>{uiText("分类")}</span><SelectControl label={uiText("移动到分类")} fullWidth value={value} onValueChange={setValue}
+            options={[{ value: '', label: uiText("未分类") }, ...categories.map(c => ({ value: c.id, label: c.name }))]} /></label>}
       </Dialog>
     </div></PreviewActivity>
   );

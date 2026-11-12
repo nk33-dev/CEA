@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useRef, useState, type ReactNode } from 'react';
 import * as Select from '@radix-ui/react-select';
 import Check from 'lucide-react/icons/check';
@@ -14,7 +15,7 @@ interface SelectOption {
   separated?: boolean;
 }
 
-export function SelectControl({ value, onValueChange, options, label, placeholder = '请选择', disabled, fullWidth, filter, icon, align, iconOnly }: {
+export function SelectControl({ value, onValueChange, options, label, placeholder = uiText("请选择"), disabled, fullWidth, filter, icon, align, iconOnly }: {
   value: string;
   onValueChange: (value: string) => void;
   options: SelectOption[];
@@ -27,6 +28,7 @@ export function SelectControl({ value, onValueChange, options, label, placeholde
   align?: 'start' | 'end';
   iconOnly?: boolean;
 }) {
+  useUi();
   const trigger = useRef<HTMLButtonElement>(null);
   const fullscreenOwner = useRef<HTMLElement | null>(null);
   const [container, setContainer] = useState<HTMLElement>();
@@ -62,7 +64,7 @@ export function SelectControl({ value, onValueChange, options, label, placeholde
             {options.map((option, i) => [
               option.separated && <Select.Separator key={`${option.value}-sep`} className="cea-select-separator" />,
               <Select.Item className="option-row cea-select-item" key={option.value} value={String(i)} disabled={option.disabled} textValue={option.label}>
-                <Select.ItemText>{option.label}</Select.ItemText>
+                <Select.ItemText>{uiText(option.label)}</Select.ItemText>
                 {option.note && <span className="cea-select-note">{option.note}</span>}
                 <Select.ItemIndicator className="cea-select-check"><Check size={14} aria-hidden="true" /></Select.ItemIndicator>
               </Select.Item>,

@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useRef, useState, type ReactNode } from 'react';
 import ArrowRight from 'lucide-react/icons/arrow-right';
 import FolderOpen from 'lucide-react/icons/folder-open';
@@ -5,8 +6,10 @@ import Database from 'lucide-react/icons/database';
 import { FolderPicker } from './FolderPicker.tsx';
 import { api, errorMessage } from '../lib/api.ts';
 import { useLibrary } from '../lib/store.tsx';
+import { AppPreferences } from './AppPreferences.tsx';
 
 export function LibrarySetup({ children }: { children: ReactNode }) {
+  useUi();
   const { info, initialized, loadError, refresh } = useLibrary();
   const [path, setPath] = useState('');
   const [picking, setPicking] = useState(false);
@@ -32,36 +35,36 @@ export function LibrarySetup({ children }: { children: ReactNode }) {
   };
 
   return <main className="setup">
-    <header className="setup-brand"><strong>CEA</strong><span>Craft Every Aspect</span></header>
+    <header className="setup-brand"><strong>CEA</strong><span>Craft Every Aspect</span><AppPreferences /></header>
     <section className="setup-content" aria-labelledby="setup-title">
-      {!initialized ? <p role="status">正在读取本机配置…</p> : <>
+      {!initialized ? <p role="status">{uiText("正在读取本机配置…")}</p> : <>
         <div className="setup-heading"><Database size={22} strokeWidth={1.5} aria-hidden="true" />
-          <h1 id="setup-title">选择素材库位置</h1></div>
-        <p className="setup-lead">组件代码、提示词和媒体文件会保存在这里，与程序分开。</p>
+          <h1 id="setup-title">{uiText("选择素材库位置")}</h1></div>
+        <p className="setup-lead">{uiText("组件代码、提示词和媒体文件会保存在这里，与程序分开。")}</p>
         <form onSubmit={e => { e.preventDefault(); void open(); }} className="setup-form">
-          <label htmlFor="library-path">素材库文件夹</label>
+          <label htmlFor="library-path">{uiText("素材库文件夹")}</label>
           <div className="setup-path">
             <input id="library-path" value={path} onChange={e => setPath(e.target.value)} disabled={busy}
-              placeholder="选择文件夹，或填写完整路径" spellCheck={false}
+              placeholder={uiText("选择文件夹，或填写完整路径")} spellCheck={false}
               aria-describedby="library-path-help" aria-invalid={!!error} />
             <button type="button" className="btn" disabled={busy} onClick={() => setPicking(true)}>
-              <FolderOpen size={16} aria-hidden="true" />浏览</button>
+              <FolderOpen size={16} aria-hidden="true" />{uiText("浏览")}</button>
           </div>
-          <p id="library-path-help" className="setup-help">选择空文件夹创建新库，或打开已有素材库。已有文件不会被覆盖。</p>
+          <p id="library-path-help" className="setup-help">{uiText("选择空文件夹创建新库，或打开已有素材库。已有文件不会被覆盖。")}</p>
           {(error || loadError) && <div className="setup-error" role="alert">
             <p>{error || loadError}</p>
-            {loadError && <button type="button" className="text-link" onClick={() => void refresh()}>重新连接</button>}
+            {loadError && <button type="button" className="text-link" onClick={() => void refresh()}>{uiText("重新连接")}</button>}
           </div>}
           <div className="setup-actions">
-            <span>之后可以在设置中切换位置。</span>
+            <span>{uiText("之后可以在设置中切换位置。")}</span>
             <button type="submit" className="btn btn-dark" disabled={!path.trim() || busy || !!loadError}>
-              {busy ? '正在打开…' : '打开素材库'}<ArrowRight size={15} aria-hidden="true" /></button>
+              {busy ? uiText("正在打开…") : uiText("打开素材库")}<ArrowRight size={15} aria-hidden="true" /></button>
           </div>
         </form>
       </>}
     </section>
-    <FolderPicker open={picking} onClose={() => setPicking(false)} title="选择素材库文件夹" confirm="使用此文件夹"
-      check={listing => listing.kind === 'occupied' ? '请选择空文件夹或已有素材库，也可以新建文件夹' : null}
+    <FolderPicker open={picking} onClose={() => setPicking(false)} title={uiText("选择素材库文件夹")} confirm={uiText("使用此文件夹")}
+      check={listing => listing.kind === 'occupied' ? uiText("请选择空文件夹或已有素材库，也可以新建文件夹") : null}
       onPick={value => { setPath(value); setError(''); }} />
   </main>;
 }

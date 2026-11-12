@@ -1,3 +1,4 @@
+import { uiText, useUi } from './uiI18n.ts';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import X from 'lucide-react/icons/x';
 import type { Category, LibraryInfo, TagCount } from '../../shared/types.ts';
@@ -25,6 +26,7 @@ export function useLibrary() {
 }
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
+  useUi();
   const [info, setInfo] = useState<LibraryInfo | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<TagCount[]>([]);
@@ -71,7 +73,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       {children}
       <div ref={toastEl} className="t-toast toast" role="status" aria-live="polite" aria-hidden="true" inert>
         <span data-toast-message />
-        <button type="button" className="toast-close" data-toast-dismiss aria-label="关闭提示">
+        <button type="button" className="toast-close" data-toast-dismiss aria-label={uiText("关闭提示")}>
           <X size={14} aria-hidden="true" />
         </button>
       </div>

@@ -1,3 +1,4 @@
+import { uiText } from './uiI18n.ts';
 import type {
   AssetDetail, AssetInput, AssetSummary, Category, CodeFile, DirListing, DuplicateStrategy,
   ImportPreview, ImportResult, LibraryInfo, TagCount, AssetPage,
@@ -32,7 +33,7 @@ async function request<T>(method: string, url: string, body?: unknown, raw?: Blo
   }
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    throw new ApiError(res.status, data?.error ?? `请求失败（${res.status}）`);
+    throw new ApiError(res.status, data?.error ?? uiText("请求失败（{{value0}}）", {value0: res.status}));
   }
   if (res.status === 204) return undefined as T;
   const type = res.headers.get('content-type') ?? '';
@@ -50,7 +51,7 @@ async function download(method: string, url: string, body?: unknown) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    throw new ApiError(res.status, data?.error ?? `导出失败（${res.status}）`);
+    throw new ApiError(res.status, data?.error ?? uiText("导出失败（{{value0}}）", {value0: res.status}));
   }
   const disposition = res.headers.get('content-disposition') ?? '';
   const match = /filename\*=UTF-8''([^;]+)/.exec(disposition);
@@ -121,5 +122,5 @@ export function fileUrl(rel: string) {
 }
 
 export function errorMessage(e: unknown) {
-  return e instanceof Error ? e.message : String(e);
+  return uiText(e instanceof Error ? e.message : String(e));
 }

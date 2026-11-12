@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import Maximize2 from 'lucide-react/icons/maximize-2';
 import Minimize2 from 'lucide-react/icons/minimize-2';
@@ -68,24 +69,26 @@ export function useFullscreen<T extends HTMLElement>() {
 }
 
 export function FullscreenButton({ active, onToggle }: { active: boolean; onToggle: () => void }) {
-  const label = active ? '退出全屏' : '全屏预览';
-  return <button type="button" className="preview-fullscreen" aria-label={label} title={active ? '退出全屏（Esc）' : '全屏预览'} aria-pressed={active} onClick={onToggle}>
+  useUi();
+  const label = active ? uiText("退出全屏") : uiText("全屏预览");
+  return <button type="button" className="preview-fullscreen" aria-label={label} title={active ? uiText("退出全屏（Esc）") : uiText("全屏预览")} aria-pressed={active} onClick={onToggle}>
     {active ? <Minimize2 size={16} strokeWidth={1.8} aria-hidden="true" /> : <Maximize2 size={16} strokeWidth={1.8} aria-hidden="true" />}
-    <span>{active ? '退出全屏' : '全屏'}</span>
+    <span>{active ? uiText("退出全屏") : uiText("全屏")}</span>
   </button>;
 }
 
 /** 工具栏和画布一起进入全屏，iframe 保持原位置和实例。 */
 export function FullscreenFrame({ fullscreen, children }: { fullscreen: ReturnType<typeof useFullscreen<HTMLDivElement>>; children: ReactNode }) {
+  useUi();
   const [tools, setTools] = useState(false);
   const id = useId();
   useEffect(() => { setTools(false); }, [fullscreen.active]);
   return <div ref={fullscreen.ref} id={id} className={`fullscreen-frame${fullscreen.active ? ' is-active' : ''}${tools ? ' tools-open' : ''}`}>
     {children}
     {fullscreen.active && <div className="fullscreen-dock">
-      <button type="button" className="icon-btn" aria-label={tools ? '收起预览工具' : '展开预览工具'} title={tools ? '收起预览工具' : '展开预览工具'}
+      <button type="button" className="icon-btn" aria-label={tools ? uiText("收起预览工具") : uiText("展开预览工具")} title={tools ? uiText("收起预览工具") : uiText("展开预览工具")}
         aria-expanded={tools} aria-controls={id} onClick={() => setTools(value => !value)}><SlidersHorizontal size={17} /></button>
-      <button type="button" className="icon-btn" aria-label="退出全屏" title="退出全屏（Esc）" onClick={fullscreen.toggle}><Minimize2 size={17} /></button>
+      <button type="button" className="icon-btn" aria-label={uiText("退出全屏")} title={uiText("退出全屏（Esc）")} onClick={fullscreen.toggle}><Minimize2 size={17} /></button>
     </div>}
   </div>;
 }

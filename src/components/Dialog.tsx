@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import X from 'lucide-react/icons/x';
 import { modalController, type ModalHandle } from '../lib/modalController.ts';
@@ -15,6 +16,7 @@ interface DialogProps {
 }
 
 export function Dialog({ open, onClose, title, children, footer, wide, locked, className }: DialogProps) {
+  useUi();
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   const handle = useRef<ModalHandle | null>(null);
@@ -48,7 +50,7 @@ export function Dialog({ open, onClose, title, children, footer, wide, locked, c
       <div className="dialog-body">
         <header className="dialog-head">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="icon-btn" data-close-dialog aria-label="关闭" disabled={locked}>
+          <button type="button" className="icon-btn" data-close-dialog aria-label={uiText("关闭")} disabled={locked}>
             <X size={16} aria-hidden="true" />
           </button>
         </header>

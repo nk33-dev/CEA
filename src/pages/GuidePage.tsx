@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import ArrowLeft from 'lucide-react/icons/arrow-left';
@@ -37,15 +38,16 @@ function renderGuide(markdown: string) {
 }
 
 export function GuidePage() {
+  useUi();
   const { info } = useLibrary();
   const cli = cliCommand(info?.cli);
   const guide = useMemo(() => renderGuide(folderGuide(cli)), [cli]);
   return (
     <div className="guide-page">
-      <Link to="/transfer" className="text-link guide-back"><ArrowLeft size={14} aria-hidden="true" />返回导入导出</Link>
+      <Link to="/transfer" className="text-link guide-back"><ArrowLeft size={14} aria-hidden="true" />{uiText("返回导入导出")}</Link>
       <section className="guide-ai" aria-labelledby="guide-ai-title">
-        <h1 id="guide-ai-title">交给 AI 时</h1>
-        <p>把下面这段接在需求后面，AI 会自己看格式并导入到当前素材库，不用贴后面的说明。</p>
+        <h1 id="guide-ai-title">{uiText("交给 AI 时")}</h1>
+        <p>{uiText("把下面这段接在需求后面，AI 会自己看格式并导入到当前素材库，不用贴后面的说明。")}</p>
         <AiPrompt />
       </section>
       <article className="guide-doc">{guide}</article>

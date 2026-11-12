@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import Check from 'lucide-react/icons/check';
@@ -38,6 +39,7 @@ const MAX_TAGS = 3;
  * 平时只显示已收藏的心形，悬停或键盘聚焦时其余按钮浮现。
  */
 export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, locale, tagLabels, activeTags, selecting, selected, onToggleSelect, onFavorite, onTag, onDelete }: CardProps) {
+  useUi();
   const { ref, inView } = useInView<HTMLDivElement>();
   const { notify } = useLibrary();
   const [hovered, setHovered] = useState(false);
@@ -68,7 +70,7 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
       await api.setFavorite(asset.id, next);
     } catch (e) {
       onFavorite(asset.id, !next);
-      notify(`收藏没有保存：${errorMessage(e)}`);
+      notify(uiText("收藏没有保存：{{value0}}", {value0: errorMessage(e)}));
     } finally {
       favoriteBusy.current = false;
       setSaving(false);
@@ -81,11 +83,11 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
         onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setHovered(true); setPaused(false); } }}
         onPointerLeave={() => { leaveTimer.current = setTimeout(() => setHovered(false), 180); }}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
-        {asset.cover && <img className="card-cover" src={fileUrl(asset.cover)} alt="" loading="lazy" decoding="async" />}
+        {asset.cover && <img className="card-cover" src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" />}
         {mounted && <FitStage assetId={asset.id} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
           active={active} onResume={resume} reloadKey={replay} />}
         {selecting ? (
-          <button type="button" className="card-select" aria-pressed={selected} aria-label={`选择「${title}」`} onClick={() => onToggleSelect(asset.id)}>
+          <button type="button" className="card-select" aria-pressed={selected} aria-label={uiText("选择「{{value0}}」", {value0: title})} onClick={() => onToggleSelect(asset.id)}>
             <span className="card-check">{selected && <Check size={13} strokeWidth={3} aria-hidden="true" />}</span>
           </button>
         ) : null}
@@ -106,18 +108,18 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
         </div>
         {!selecting && (
           <div className={`card-actions${live ? ' is-live' : ''}`}>
-            <button type="button" className="card-act" aria-label={active ? '暂停预览' : '播放预览'} title={active ? '暂停预览' : '播放预览'}
+            <button type="button" className="card-act" aria-label={active ? uiText("暂停预览") : uiText("播放预览")} title={active ? uiText("暂停预览") : uiText("播放预览")}
               aria-pressed={active} onClick={() => { if (active) { setPaused(true); onLiveChange(null); } else start(); }}>
               {active ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
             </button>
-            <button type="button" className="card-act" aria-label="重播预览" title="重播预览" onClick={() => { start(); setReplay(k => k + 1); }}>
+            <button type="button" className="card-act" aria-label={uiText("重播预览")} title={uiText("重播预览")} onClick={() => { start(); setReplay(k => k + 1); }}>
               <RotateCcw size={15} aria-hidden="true" />
             </button>
             <button type="button" className={`card-act fav${asset.favorite ? ' is-on' : ''}`} aria-pressed={asset.favorite}
-              aria-label={asset.favorite ? '取消收藏' : '收藏'} title={asset.favorite ? '取消收藏' : '收藏'} onClick={toggleFavorite} disabled={saving}>
+              aria-label={asset.favorite ? uiText("取消收藏") : uiText("收藏")} title={asset.favorite ? uiText("取消收藏") : uiText("收藏")} onClick={toggleFavorite} disabled={saving}>
               <Heart size={15} strokeWidth={2} aria-hidden="true" />
             </button>
-            <button type="button" className="card-act icon-btn-danger" aria-label={`删除「${title}」`} title="删除组件" onClick={() => onDelete(asset.id)}><Trash2 size={15} aria-hidden="true" /></button>
+            <button type="button" className="card-act icon-btn-danger" aria-label={uiText("删除「{{value0}}」", {value0: title})} title={uiText("删除组件")} onClick={() => onDelete(asset.id)}><Trash2 size={15} aria-hidden="true" /></button>
           </div>
         )}
       </div>

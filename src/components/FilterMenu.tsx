@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Check from 'lucide-react/icons/check';
@@ -29,6 +30,7 @@ interface Props {
  * 选项再多也只占工具栏里一个按钮的位置。
  */
 export function FilterMenu({ label, options, selected, multiple, onChange, searchAt = 8, footer }: Props) {
+  useUi();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedOnly, setSelectedOnly] = useState(false);
@@ -157,26 +159,26 @@ export function FilterMenu({ label, options, selected, multiple, onChange, searc
           {(multiple || options.length >= searchAt) && (
             <div className="fmenu-search">
               <Search size={14} strokeWidth={2} aria-hidden="true" />
-              <input ref={search} autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder={`搜索${label}`} aria-label={`搜索${label}`}
+              <input ref={search} autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder={uiText("搜索{{value0}}", {value0: label})} aria-label={uiText("搜索{{value0}}", {value0: label})}
                 onKeyDown={e => {
                   if (e.key === 'ArrowDown') { e.preventDefault(); list.current?.focus(); }
                 }} />
-              {query && <button type="button" className="search-clear" aria-label={`清空${label}搜索`} title="清空搜索"
+              {query && <button type="button" className="search-clear" aria-label={uiText("清空{{value0}}搜索", {value0: label})} title={uiText("清空搜索")}
                 onClick={() => { setQuery(''); search.current?.focus(); }}><X size={14} /></button>}
               {multiple && (selected.length > 0 || selectedOnly) && <button type="button" className="fmenu-selected" aria-pressed={selectedOnly}
-                aria-label={selectedOnly ? `显示全部${label}` : `只看已选${label}`} title={selectedOnly ? `显示全部${label}` : `只看已选${label}`}
-                onClick={() => setSelectedOnly(v => !v)}>已选 {selected.length}</button>}
+                aria-label={selectedOnly ? uiText("显示全部{{value0}}", {value0: label}) : uiText("只看已选{{value0}}", {value0: label})} title={selectedOnly ? uiText("显示全部{{value0}}", {value0: label}) : uiText("只看已选{{value0}}", {value0: label})}
+                onClick={() => setSelectedOnly(v => !v)}>{uiText("已选 ")}{selected.length}</button>}
             </div>
           )}
           <FilterOptions key={`${q}:${selectedOnly}`} listRef={list} label={label} options={shown} multiple={multiple} isOn={isOn} toggle={toggle}
-            autoFocus={!multiple && options.length < searchAt} empty={selectedOnly && !q ? `尚未选择${label}` : !options.length && !q ? `还没有${label}` : `没有匹配的${label}`} />
+            autoFocus={!multiple && options.length < searchAt} empty={selectedOnly && !q ? uiText("尚未选择{{value0}}", {value0: label}) : !options.length && !q ? uiText("还没有{{value0}}", {value0: label}) : uiText("没有匹配的{{value0}}", {value0: label})} />
           {(footer || (multiple && selected.length > 0)) && <div className="fmenu-foot">
               {footer}
               {multiple && selected.length > 0 && <button type="button" className="link-btn" onClick={() => {
                 search.current?.focus();
                 setSelectedOnly(false);
                 onChange([]);
-              }}>清除所选</button>}
+              }}>{uiText("清除所选")}</button>}
           </div>}
         </div>,
         document.body,
@@ -189,6 +191,7 @@ function FilterOptions({ label, options, multiple, isOn, toggle, listRef, autoFo
   label: string; options: FilterOption[]; multiple?: boolean; isOn: (v: string) => boolean; toggle: (v: string) => void;
   listRef: React.RefObject<HTMLDivElement | null>; autoFocus: boolean; empty: string;
 }) {
+  useUi();
   const id = useId();
   const [activeValue, setActiveValue] = useState<string | null>(null);
   const [rowHeight, setRowHeight] = useState(36);
@@ -254,7 +257,7 @@ function FilterOptions({ label, options, multiple, isOn, toggle, listRef, autoFo
             <button key={o.value} id={`${id}-${index}`} type="button" role="option" aria-selected={isOn(o.value)} aria-posinset={index + 1} aria-setsize={options.length} tabIndex={-1}
               data-option-index={index} style={large ? { position: 'absolute', top: index * rowHeight } : undefined}
               className={`option-row fmenu-item${active === index ? ' is-focused' : ''}`} disabled={o.count === 0 && !isOn(o.value)}
-              onClick={() => { setActiveValue(o.value); listRef.current?.focus({ preventScroll: true }); toggle(o.value); }} title={o.count === 0 && !isOn(o.value) ? `${o.label}：当前没有匹配组件` : o.label}>
+              onClick={() => { setActiveValue(o.value); listRef.current?.focus({ preventScroll: true }); toggle(o.value); }} title={o.count === 0 && !isOn(o.value) ? uiText("{{value0}}：当前没有匹配组件", {value0: o.label}) : o.label}>
               {multiple && <span className="fmenu-check">{isOn(o.value) && <Check size={11} strokeWidth={2.5} aria-hidden="true" />}</span>}
               <span className="fmenu-label">{o.label}</span>
               {!multiple && <span className="fmenu-tick">{isOn(o.value) && <Check size={14} strokeWidth={2} aria-hidden="true" />}</span>}

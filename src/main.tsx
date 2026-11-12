@@ -1,3 +1,4 @@
+import { uiText, useUi } from './lib/uiI18n.ts';
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, NavLink, Outlet, RouterProvider, ScrollRestoration, useNavigation, type RouteObject } from 'react-router';
@@ -10,8 +11,10 @@ import '@fontsource-variable/inter/wght.css';
 import './styles/toast-motion.css';
 import './styles/modal-motion.css';
 import './styles/app.css';
+import { AppPreferences, UiPreferences } from './components/AppPreferences.tsx';
 
 function Shell() {
+  useUi();
   const { loadError } = useLibrary();
   const navigation = useNavigation();
   const navigating = navigation.state !== 'idle';
@@ -29,16 +32,17 @@ function Shell() {
             <span className="brand-word">CEA</span>
             <span className="brand-name">Craft<br />Every Aspect</span>
           </NavLink>
-          <nav className="topnav" aria-label="主导航">
-            <NavLink to="/" end>浏览</NavLink>
-            <NavLink to="/organize">整理</NavLink>
-            <NavLink to="/transfer">导入导出</NavLink>
-            <NavLink to="/settings">设置</NavLink>
+          <nav className="topnav" aria-label={uiText("主导航")}>
+            <NavLink to="/" end>{uiText("浏览")}</NavLink>
+            <NavLink to="/organize">{uiText("整理")}</NavLink>
+            <NavLink to="/transfer">{uiText("导入导出")}</NavLink>
+            <NavLink to="/settings">{uiText("设置")}</NavLink>
           </nav>
+          <AppPreferences />
         </div>
       </header>
       <div className="route-progress" data-busy={navigating || undefined} role={navigating ? 'status' : undefined}
-        aria-label={navigating ? '正在打开页面' : undefined} aria-hidden={!navigating || undefined}><span /></div>
+        aria-label={navigating ? uiText("正在打开页面") : undefined} aria-hidden={!navigating || undefined}><span /></div>
       {loadError && <p className="banner" role="alert">{loadError}</p>}
       <main className="main">
         <Outlet />
@@ -68,12 +72,13 @@ const routes: RouteObject[] = [
       { path: '/settings', lazy: async () => ({ Component: (await import('./pages/SettingsPage.tsx')).SettingsPage }) },
       { path: '/organize', lazy: async () => ({ Component: (await import('./pages/OrganizePage.tsx')).OrganizePage }) },
       { path: '/guide', lazy: async () => ({ Component: (await import('./pages/GuidePage.tsx')).GuidePage }) },
-      { path: '*', element: <div className="page-narrow"><div className="empty"><p className="empty-title">页面不存在</p><a className="btn" href="/">回到素材库</a></div></div> },
+      { path: '*', element: <div className="page-narrow"><div className="empty"><p className="empty-title">{uiText("页面不存在")}</p><a className="btn" href="/">{uiText("回到素材库")}</a></div></div> },
     ],
   },
 ];
 
 function Application() {
+  useUi();
   const [router] = useState(() => createBrowserRouter(routes));
   return <RouterProvider router={router} />;
 }
@@ -81,6 +86,7 @@ function Application() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LibraryProvider>
+      <UiPreferences />
       <LibrarySetup><Application /></LibrarySetup>
       <Tooltips />
     </LibraryProvider>

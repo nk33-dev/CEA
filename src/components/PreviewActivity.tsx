@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 export const MAX_RETAINED_PREVIEWS = 12;
@@ -33,6 +34,7 @@ export function createActivity() {
 const ActivityContext = createContext<ReturnType<typeof createActivity> | null>(null);
 
 export function PreviewActivity({ children }: { children: ReactNode }) {
+  useUi();
   const [activity] = useState(createActivity);
   return <ActivityContext.Provider value={activity}>{children}</ActivityContext.Provider>;
 }
@@ -59,11 +61,12 @@ export function useRetainedPreview(id: string, requested: boolean) {
 }
 
 export function PreviewActivityStatus({ fetching }: { fetching: boolean }) {
+  useUi();
   const activity = useContext(ActivityContext)!;
   const count = useSyncExternalStore(activity.subscribe, activity.snapshot, () => 0);
   const busy = fetching || count > 0;
   return <div className="browse-progress" data-busy={busy || undefined} role={busy ? 'status' : undefined}
-    aria-label={busy ? fetching ? '正在更新组件' : '正在加载组件预览' : undefined} aria-hidden={!busy || undefined}>
+    aria-label={busy ? fetching ? uiText("正在更新组件") : uiText("正在加载组件预览") : undefined} aria-hidden={!busy || undefined}>
     <span aria-hidden="true" />
   </div>;
 }

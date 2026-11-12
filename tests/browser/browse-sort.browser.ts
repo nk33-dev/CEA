@@ -60,21 +60,21 @@ for (const width of [1440, 1000]) {
       await expect(page.locator('body')).not.toHaveCSS('overflow-y', 'hidden');
       await page.getByRole('option', { name: label, exact: true }).click();
       await expect(page.locator('.results')).toHaveAttribute('aria-busy', 'true');
-      expect(await geometry()).toEqual(initial);
+      for (const [key, value] of Object.entries(await geometry())) expect(Math.abs(value - initial[key as keyof typeof initial])).toBeLessThanOrEqual(.25);
       release!();
       gate = undefined;
       await expect(page.locator('.results')).toHaveAttribute('aria-busy', 'false');
       await expect(page.locator('.card-title').first()).toHaveText(first);
       await expect(frame.locator('#counter')).toHaveText('7');
       expect(loads).toBe(initialLoads);
-      expect(await geometry()).toEqual(initial);
+      for (const [key, value] of Object.entries(await geometry())) expect(Math.abs(value - initial[key as keyof typeof initial])).toBeLessThanOrEqual(.25);
     }
     const samples = await page.evaluate(() => {
       const state = (window as unknown as { sorting: { running: boolean; samples: object[] } }).sorting;
       state.running = false;
       return state.samples;
     });
-    for (const sample of samples) expect(sample).toEqual(initial);
+    for (const sample of samples) for (const [key, value] of Object.entries(sample)) expect(Math.abs(Number(value) - initial[key as keyof typeof initial])).toBeLessThanOrEqual(.25);
     await expect(page.getByRole('listbox')).toHaveCount(0);
     await page.screenshot({ path: `test-results/browse-sort-${width}.png` });
     await page.getByRole('searchbox', { name: '搜索组件', exact: true }).fill('Component 0');

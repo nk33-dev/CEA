@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { playPath } from '../../shared/paths.ts';
 import { CARD_VIEWPORT, fitPreview, previewKind, previewScale, thumbnailTransform, type PreviewBounds, type PreviewDevice, type PreviewFraming, type PreviewLayout, type PreviewViewport } from '../../shared/preview.ts';
@@ -42,6 +43,7 @@ interface StageProps {
  * iframe 在沙箱里运行，主题通过 postMessage 切换，不用重新加载。
  */
 export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onReady, onBounds, visibleArea, loadingIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
+  useUi();
   const [initialTheme] = useState(theme);
   const [initialComponentTheme] = useState(componentTheme);
   const [initialActive] = useState(active);
@@ -67,6 +69,7 @@ export const Stage = memo(function Stage({ assetId, framework, src, title, theme
 });
 
 function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, className, onReady, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
+  useUi();
   const ref = useRef<HTMLIFrameElement>(null);
   const hasRuntime = useRef(false);
   const readyReported = useRef(false);
@@ -120,7 +123,7 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
     <iframe
       ref={ref}
       className={`stage-frame${loaded ? ' is-loaded' : ''}${className ? ' ' + className : ''}`}
-      title={`${title} 预览`}
+      title={uiText("{{value0}} 预览", {value0: title})}
       sandbox={SANDBOX}
       src={src}
       onLoad={() => {
@@ -145,6 +148,7 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
 }
 
 export const PreviewStages = memo(function PreviewStages({ framework, reloadKey = 0, active = true, onResume, onBounds, zoom = 1, viewport, ...props }: StageProps & { framework: string }) {
+  useUi();
   const [visited, setVisited] = useState<string[]>([framework]);
   const [generations, setGenerations] = useState<Record<string, number>>({});
   const [ready, setReady] = useState<Record<string, boolean>>({});
@@ -184,8 +188,9 @@ export const PreviewStages = memo(function PreviewStages({ framework, reloadKey 
 });
 
 export function PreviewLoading({ busy = true }: { busy?: boolean }) {
+  useUi();
   return <span className="stage-loading" data-busy={busy || undefined} role={busy ? 'status' : undefined}
-    aria-label={busy ? '正在加载预览' : undefined} aria-hidden={!busy || undefined}>
+    aria-label={busy ? uiText("正在加载预览") : undefined} aria-hidden={!busy || undefined}>
     <span className="stage-loading-indicator" aria-hidden="true" />
   </span>;
 }
@@ -210,6 +215,7 @@ export function useInView<T extends Element>(rootMargin = '200px', threshold = 0
  * 视口足够宽，组件不会在小卡片里切成手机布局。
  */
 export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
+  useUi();
   const { activity } = usePreviewActivity();
   const { ref, inView } = useInView<HTMLDivElement>('0px', 0.1);
   const [box, setBox] = useState<PreviewViewport | null>(null);
@@ -248,6 +254,7 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
 }
 
 export function ZoomStage({ zoom = 1, viewport, children }: { zoom?: number; viewport?: PreviewViewport | null; children: React.ReactNode }) {
+  useUi();
   if (viewport) return <FixedStage viewport={viewport} zoom={zoom}>{children}</FixedStage>;
   const scale = previewScale(zoom);
   return <div className="zoom-stage">
@@ -259,6 +266,7 @@ export function ZoomStage({ zoom = 1, viewport, children }: { zoom?: number; vie
 }
 
 function FixedStage({ viewport, zoom, children }: { viewport: PreviewViewport; zoom: number; children: React.ReactNode }) {
+  useUi();
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0);
   useEffect(() => {

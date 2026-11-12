@@ -1,3 +1,4 @@
+import { uiText, useUi } from '../lib/uiI18n.ts';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import ArrowRight from 'lucide-react/icons/arrow-right';
@@ -48,11 +49,12 @@ async function readDropped(items: DataTransferItemList): Promise<File | null> {
   };
   for (const e of entries) await walk(e, '');
   if (!Object.keys(files).length) files['.empty'] = strToU8('');
-  const name = entries.length === 1 ? entries[0].name : '拖入的文件夹';
+  const name = entries.length === 1 ? entries[0].name : uiText("拖入的文件夹");
   return new File([zipSync(files, { level: 0 })], `${name}.zip`, { type: 'application/zip' });
 }
 
 export function TransferPage() {
+  useUi();
   const { info, refresh, notify } = useLibrary();
   const [format, setFormat] = useState<ExportFormat>('backup');
   const [exporting, setExporting] = useState(false);
@@ -76,7 +78,7 @@ export function TransferPage() {
     setExporting(true);
     setExportedTo('');
     setExportError('');
-    try { notify(`已下载：${await api.exportZip(undefined, format)}`); }
+    try { notify(uiText("已下载：{{value0}}", {value0: await api.exportZip(undefined, format)})); }
     catch (e) { setExportError(errorMessage(e)); }
     finally { setExporting(false); }
   };
@@ -131,29 +133,27 @@ export function TransferPage() {
 
   return (
     <div className="workspace workspace-admin transfer">
-      <header className="workspace-head"><div><h1>导入导出</h1><p>当前素材库 <code>{info?.path}</code></p></div>
+      <header className="workspace-head"><div><h1>{uiText("导入导出")}</h1><p>{uiText("当前素材库 ")}<code>{info?.path}</code></p></div>
 
       </header>
 
       <div className={`transfer-layout${!p && !result && !error ? ' is-idle' : ''}`}>
       <section className="settings-section" aria-labelledby="import-title">
         <div className="settings-heading">
-          <h2 id="import-title">导入</h2>
-          <p className="muted">支持备份 ZIP 或组件文件夹，先预览再导入。</p>
+          <h2 id="import-title">{uiText("导入")}</h2>
+          <p className="muted">{uiText("支持备份 ZIP 或组件文件夹，先预览再导入。")}</p>
         </div>
         <div className="settings-content transfer-import">
           {result ? (
             <div className="import-result" role="status">
-              <p className="import-result-title"><Check size={16} strokeWidth={2.4} aria-hidden="true" />导入完成</p>
-              <p>
-                新增 {result.created} 个
-                {result.overwritten > 0 && `，覆盖 ${result.overwritten} 个`}
-                {result.copied > 0 && `，另存副本 ${result.copied} 个`}
-                {result.skipped > 0 && `，跳过 ${result.skipped} 个`}
+              <p className="import-result-title"><Check size={16} strokeWidth={2.4} aria-hidden="true" />{uiText("导入完成")}</p>
+              <p>{uiText(" 新增 ")}{result.created}{uiText(" 个 ")}{result.overwritten > 0 && uiText("，覆盖 {{value0}} 个", {value0: result.overwritten})}
+                {result.copied > 0 && uiText("，另存副本 {{value0}} 个", {value0: result.copied})}
+                {result.skipped > 0 && uiText("，跳过 {{value0}} 个", {value0: result.skipped})}
               </p>
               <div className="sheet-actions">
-                <Link to="/" className="btn btn-dark btn-sm">查看组件</Link>
-                <button type="button" className="btn btn-quiet btn-sm" onClick={reset}>继续导入</button>
+                <Link to="/" className="btn btn-dark btn-sm">{uiText("查看组件")}</Link>
+                <button type="button" className="btn btn-quiet btn-sm" onClick={reset}>{uiText("继续导入")}</button>
               </div>
             </div>
           ) : !p ? (
@@ -164,10 +164,10 @@ export function TransferPage() {
               onDrop={e => void onDrop(e)}
             >
               <span className="transfer-upload-icon"><FileArchive size={24} strokeWidth={1.6} aria-hidden="true" /></span>
-              <p>{reading ? `正在识别 ${source}…` : '把文件夹或 ZIP 拖到这里'}</p>
+              <p>{reading ? uiText("正在识别 {{value0}}…", {value0: source}) : uiText("把文件夹或 ZIP 拖到这里")}</p>
               <div className="transfer-drop-actions">
-                <button type="button" className="btn" onClick={() => setPicker('import')} disabled={reading}><FolderOpen size={15} />选择文件夹</button>
-                <button type="button" className="btn btn-quiet" onClick={() => input.current?.click()} disabled={reading}>选择 ZIP</button>
+                <button type="button" className="btn" onClick={() => setPicker('import')} disabled={reading}><FolderOpen size={15} />{uiText("选择文件夹")}</button>
+                <button type="button" className="btn btn-quiet" onClick={() => input.current?.click()} disabled={reading}>{uiText("选择 ZIP")}</button>
               </div>
               <input ref={input} type="file" accept=".zip,application/zip" hidden onChange={e => { const f = e.target.files?.[0]; if (f) chooseFile(f); e.target.value = ''; }} />
             </div>
@@ -176,50 +176,49 @@ export function TransferPage() {
               <div className="import-file">
                 {p.source === 'folder' ? <FolderOpen size={18} strokeWidth={1.6} aria-hidden="true" /> : <FileArchive size={18} strokeWidth={1.6} aria-hidden="true" />}
                 <span className="import-file-name" title={source}>{source}</span>
-                <button type="button" className="link-btn" onClick={reset} disabled={importing}>换一个</button>
+                <button type="button" className="link-btn" onClick={reset} disabled={importing}>{uiText("换一个")}</button>
               </div>
               <p className="import-facts">
-                {p.source === 'backup' ? '完整备份' : '素材文件夹'} · {p.assetCount} 个组件 · {p.fileCount} 个文件
-                {p.exportedAt && ` · ${new Date(p.exportedAt).toLocaleDateString('zh-CN')} 导出`}
+                {p.source === 'backup' ? uiText("完整备份") : uiText("素材文件夹")} · {p.assetCount}{uiText(" 个组件 · ")}{p.fileCount}{uiText(" 个文件 ")}{p.exportedAt && uiText(" · {{value0}} 导出", {value0: new Date(p.exportedAt).toLocaleDateString('zh-CN')})}
               </p>
               {p.items.length > 0 && <ul className="import-items">
                 {p.items.slice(0, 50).map(a => <li key={a.id}>
                   <span>{a.title}</span><small>{a.frameworks.map(frameworkLabel).join(' · ')}</small>
-                  {p.duplicates.some(d => d.id === a.id) && <em>已存在</em>}
+                  {p.duplicates.some(d => d.id === a.id) && <em>{uiText("已存在")}</em>}
                 </li>)}
-                {p.items.length > 50 && <li className="muted">还有 {p.items.length - 50} 个</li>}
+                {p.items.length > 50 && <li className="muted">{uiText("还有 ")}{p.items.length - 50}{uiText(" 个")}</li>}
               </ul>}
               {!!p.problems?.length && <div className="import-problems" role="alert">
-                <strong>{p.problems.length} 个没认出来，会跳过</strong>
+                <strong>{p.problems.length}{uiText(" 个没认出来，会跳过")}</strong>
                 <ul>{p.problems.map(x => <li key={x.name}><code>{x.name}</code>：{x.reason}</li>)}</ul>
               </div>}
 
-              {p.source === 'backup' && <div className="choice" role="radiogroup" aria-label="导入到">
+              {p.source === 'backup' && <div className="choice" role="radiogroup" aria-label={uiText("导入到")}>
                 <button type="button" role="radio" aria-checked={mode === 'merge'} onClick={() => setMode('merge')} disabled={importing}>
-                  <strong>合并到当前库</strong><small>{info?.path}</small>
+                  <strong>{uiText("合并到当前库")}</strong><small>{info?.path}</small>
                 </button>
                 <button type="button" role="radio" aria-checked={mode === 'new'} onClick={() => setMode('new')} disabled={importing}>
-                  <strong>恢复成一个新库</strong><small>导入后切换过去</small>
+                  <strong>{uiText("恢复成一个新库")}</strong><small>{uiText("导入后切换过去")}</small>
                 </button>
               </div>}
               {mode === 'new' && p.source === 'backup' && (
                 <div className="path-pick">
-                  <code>{targetPath || '还没选位置'}</code>
-                  <button type="button" className="btn btn-sm" onClick={() => setPicker('import')} disabled={importing}>选择空文件夹</button>
+                  <code>{targetPath || uiText("还没选位置")}</code>
+                  <button type="button" className="btn btn-sm" onClick={() => setPicker('import')} disabled={importing}>{uiText("选择空文件夹")}</button>
                 </div>
               )}
 
               {(mode === 'merge' || p.source === 'folder') && p.duplicates.length > 0 && (
                 <div className="dup">
-                  <p className="dup-title">{p.duplicates.length} 个已在库里，怎么处理？</p>
-                  <ChoiceControl label="重复的组件" value={duplicates} onChange={setDuplicates} options={STRATEGIES} disabled={importing} />
+                  <p className="dup-title">{p.duplicates.length}{uiText(" 个已在库里，怎么处理？")}</p>
+                  <ChoiceControl label={uiText("重复的组件")} value={duplicates} onChange={setDuplicates} options={STRATEGIES} disabled={importing} />
                   <p className="reuse-hint">{STRATEGIES.find(s => s.value === duplicates)?.hint}</p>
                 </div>
               )}
 
               <button type="button" className="btn btn-dark" onClick={runImport}
                 disabled={importing || !p.assetCount || (mode === 'new' && p.source === 'backup' && !targetPath.trim())}>
-                {importing ? '正在导入…' : `导入 ${p.assetCount} 个组件`}
+                {importing ? uiText("正在导入…") : uiText("导入 {{value0}} 个组件", {value0: p.assetCount})}
               </button>
             </div>
           )}
@@ -234,11 +233,11 @@ export function TransferPage() {
 
       <section className="settings-section" aria-labelledby="export-title">
         <div className="settings-heading">
-          <h2 id="export-title">导出</h2>
-          <p className="muted">导出全部 {info?.assetCount ?? 0} 个组件。</p>
+          <h2 id="export-title">{uiText("导出")}</h2>
+          <p className="muted">{uiText("导出全部 ")}{info?.assetCount ?? 0}{uiText(" 个组件。")}</p>
         </div>
         <div className="settings-content transfer-export">
-          <ChoiceControl label="导出格式" value={format} onChange={next => { setFormat(next); setExportedTo(''); setExportError(''); }} list disabled={exporting}
+          <ChoiceControl label={uiText("导出格式")} value={format} onChange={next => { setFormat(next); setExportedTo(''); setExportError(''); }} list disabled={exporting}
             options={FORMATS.map(option => ({
               value: option.value, ariaLabel: option.label,
               label: <>
@@ -250,24 +249,24 @@ export function TransferPage() {
           <div className="transfer-export-footer">
           <div className="transfer-actions">
             <button type="button" className="btn" onClick={download} disabled={exporting || !info?.assetCount}>
-              <Download size={15} />{exporting ? '正在导出…' : '下载 ZIP'}
+              <Download size={15} />{exporting ? uiText("正在导出…") : uiText("下载 ZIP")}
             </button>
-            {format === 'folder' && <button type="button" className="btn" onClick={() => setPicker('export')} disabled={exporting || !info?.assetCount}><FolderOpen size={15} />保存到文件夹</button>}
-            <Link to="/?select=1" className="text-link">选择部分组件<ArrowRight size={14} aria-hidden="true" /></Link>
+            {format === 'folder' && <button type="button" className="btn" onClick={() => setPicker('export')} disabled={exporting || !info?.assetCount}><FolderOpen size={15} />{uiText("保存到文件夹")}</button>}
+            <Link to="/?select=1" className="text-link">{uiText("选择部分组件")}<ArrowRight size={14} aria-hidden="true" /></Link>
           </div>
-          {exportError && <p className="form-error" role="alert">导出失败：{exportError}</p>}
-          {exportedTo && <p className="transfer-done"><Check size={14} />已导出到 <button type="button" className="link-btn" onClick={() => void api.reveal(exportedTo)}>{exportedTo}</button></p>}
+          {exportError && <p className="form-error" role="alert">{uiText("导出失败：")}{exportError}</p>}
+          {exportedTo && <p className="transfer-done"><Check size={14} />{uiText("已导出到 ")}<button type="button" className="link-btn" onClick={() => void api.reveal(exportedTo)}>{exportedTo}</button></p>}
           </div>
         </div>
       </section>
       </div>
 
-      <FolderPicker open={picker === 'export'} onClose={() => setPicker(null)} title="导出到哪里" confirm="导出到这里"
+      <FolderPicker open={picker === 'export'} onClose={() => setPicker(null)} title={uiText("导出到哪里")} confirm={uiText("导出到这里")}
         check={() => null} onPick={dir => void exportToFolder(dir)} />
-      <FolderPicker open={picker === 'import' && !(p && mode === 'new')} onClose={() => setPicker(null)} title="选择要导入的文件夹" confirm="导入这个文件夹"
-        check={l => l.kind === 'library' ? '这是一个素材库。要用它请到设置里切换' : null} onPick={chooseFolder} />
-      <FolderPicker open={picker === 'import' && !!p && mode === 'new'} onClose={() => setPicker(null)} title="恢复到哪个文件夹" confirm="使用这个文件夹"
-        check={l => l.kind === 'empty' ? null : '需要一个空文件夹'} onPick={setTargetPath} />
+      <FolderPicker open={picker === 'import' && !(p && mode === 'new')} onClose={() => setPicker(null)} title={uiText("选择要导入的文件夹")} confirm={uiText("导入这个文件夹")}
+        check={l => l.kind === 'library' ? uiText("这是一个素材库。要用它请到设置里切换") : null} onPick={chooseFolder} />
+      <FolderPicker open={picker === 'import' && !!p && mode === 'new'} onClose={() => setPicker(null)} title={uiText("恢复到哪个文件夹")} confirm={uiText("使用这个文件夹")}
+        check={l => l.kind === 'empty' ? null : uiText("需要一个空文件夹")} onPick={setTargetPath} />
 
     </div>
   );
