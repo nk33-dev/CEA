@@ -1,0 +1,26 @@
+node_modules
+test-results/
+playwright-report/
+dist
+*.log
+.tmp-*
+.vite
+
+# Local configuration, library data and exported packages
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.zip
+*.pem
+*.key
+/assets/
+/CEA-Assets/
+/library.json
+/cea-settings.json
+/server/seed/
