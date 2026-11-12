@@ -496,17 +496,17 @@ export function EditPage() {
             </details>
             <NotesPreview files={variant.files} framework={variant.framework} />
           </div>
-          <DeviceWorkspace background={background} onBackgroundChange={setBackground}><div className="panel panel-preview editor-preview">
+          <DeviceWorkspace fullscreen={fullscreen.active} background={background} onBackgroundChange={setBackground}><div className="panel panel-preview editor-preview">
+            <FullscreenFrame fullscreen={fullscreen}>
             <div className="panel-bar">
               <ChoiceControl label="预览内容" value={previewTab} onChange={setPreviewTab}
-                options={[{ value: 'live', label: '实时预览' }, { value: 'card', label: '卡片外观' }]} small />
+                options={[{ value: 'live', label: '实时预览' }, { value: 'card', label: '卡片外观', disabled: fullscreen.active }]} small />
               {previewTab === 'live' && <AppearanceToggle value={appearance} onChange={setComponentTheme} support={themeSupport} />}
               <div className="panel-bar-right">
                 {previewTab === 'live' && <DeviceBackground />}
                 <button type="button" className="icon-btn" aria-label="重播" title="重播" onClick={() => setReloadKey(k => k + 1)}>
                   <RotateCcw size={16} strokeWidth={1.8} aria-hidden="true" />
                 </button>
-                {previewTab === 'live' && <FullscreenButton active={fullscreen.active} onToggle={fullscreen.toggle} />}
               </div>
             </div>
             {draftPreview.error && <div className="workspace-feedback" role="alert">
@@ -516,18 +516,16 @@ export function EditPage() {
             {previewTab === 'live' ? <>
               <div className="panel-subbar">
                 <DeviceTools />
-                <DeviceZoom />
+                <DeviceZoom><FullscreenButton active={fullscreen.active} onToggle={fullscreen.toggle} /></DeviceZoom>
               </div>
-              <FullscreenFrame fullscreen={fullscreen}>
               <div className={`preview-well preview-well-edit${background === 'dark' ? ' theme-dark' : ''}`}>
                 <PreviewLoading busy={draftPreview.pending} />
                 {previewUrl
-                  ? <DeviceCanvas fullscreen={fullscreen.active} active={editorTab === 'code'}>{(device, onBounds, framing) => <Stage src={previewUrl} title={draft.title || '草稿'} reloadKey={reloadKey} componentTheme={effectiveTheme} theme={background === 'dark' ? 'dark' : 'light'} active={editorTab === 'code'} device={device} framing={framing} onBounds={onBounds} />}</DeviceCanvas>
+                  ? <DeviceCanvas active={editorTab === 'code'}>{(device, onBounds, framing) => <Stage src={previewUrl} title={draft.title || '草稿'} reloadKey={reloadKey} componentTheme={effectiveTheme} theme={background === 'dark' ? 'dark' : 'light'} active={editorTab === 'code'} device={device} framing={framing} onBounds={onBounds} />}</DeviceCanvas>
                   : variant.files.some(f => f.content.trim())
                     ? <div className="stage-host" aria-busy="true"><PreviewLoading /></div>
                     : <p className="preview-empty">填入代码后在这里预览</p>}
               </div>
-              </FullscreenFrame>
             </> : (
               <div className="card-look">
                 <div className="card-look-sample">
@@ -535,6 +533,7 @@ export function EditPage() {
                 </div>
               </div>
             )}
+            </FullscreenFrame>
           </div></DeviceWorkspace>
         </section>
 

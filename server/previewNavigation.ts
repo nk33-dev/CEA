@@ -1,4 +1,9 @@
 export const PREVIEW_NAVIGATION_SCRIPT = String.raw`
+  document.addEventListener('keydown',function(event){
+    if(event.key==='Escape'&&!event.defaultPrevented&&!document.querySelector('[popover]:popover-open,dialog[open]')){
+      parent.postMessage({type:'cea:escape'},'*');
+    }
+  });
   var canvasNavigation=null;
   addEventListener('message',function(event){
     if(event.source===parent&&event.data?.type==='cea:canvas-navigation')canvasNavigation=event.data.value;
@@ -7,8 +12,8 @@ export const PREVIEW_NAVIGATION_SCRIPT = String.raw`
     for(var node=target instanceof Element?target:target.parentElement;node;node=node.parentElement){
       var style=getComputedStyle(node);
       var root=node===document.scrollingElement;
-      var scrollX=root||/auto|scroll|overlay/.test(style.overflowX);
-      var scrollY=root||/auto|scroll|overlay/.test(style.overflowY);
+      var scrollX=root?!/^(hidden|clip)$/.test(style.overflowX):/auto|scroll|overlay/.test(style.overflowX);
+      var scrollY=root?!/^(hidden|clip)$/.test(style.overflowY):/auto|scroll|overlay/.test(style.overflowY);
       var x=scrollX&&node.scrollWidth>node.clientWidth+1;
       var y=scrollY&&node.scrollHeight>node.clientHeight+1;
       if(x&&((dx>0&&node.scrollLeft<node.scrollWidth-node.clientWidth-1)||(dx<0&&node.scrollLeft>0)))return true;

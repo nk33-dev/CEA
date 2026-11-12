@@ -2,7 +2,7 @@ import vm from 'node:vm';
 import { describe, it, expect, vi } from 'vitest';
 import { PREVIEW_NAVIGATION_SCRIPT } from '../server/previewNavigation.ts';
 
-function harness(overscroll: string, atBottom: boolean) {
+function harness(overscroll: string, atBottom: boolean, options: { root?: boolean; overflow?: string } = {}) {
   const postMessage = vi.fn();
   const parent = { postMessage };
   const listeners = new Map<string, (event: unknown) => void>();
@@ -18,8 +18,8 @@ function harness(overscroll: string, atBottom: boolean) {
   const target = new Element();
   vm.runInNewContext(PREVIEW_NAVIGATION_SCRIPT, {
     parent, Element, innerWidth: 1000, innerHeight: 800,
-    getComputedStyle: () => ({ overflowX: 'auto', overflowY: 'auto', overscrollBehaviorX: overscroll, overscrollBehaviorY: overscroll }),
-    document: { scrollingElement: null, addEventListener: (name: string, fn: (event: unknown) => void) => listeners.set(name, fn) },
+    getComputedStyle: () => ({ overflowX: options.overflow ?? 'auto', overflowY: options.overflow ?? 'auto', overscrollBehaviorX: overscroll, overscrollBehaviorY: overscroll }),
+    document: { scrollingElement: options.root ? target : null, addEventListener: (name: string, fn: (event: unknown) => void) => listeners.set(name, fn) },
     addEventListener: (name: string, fn: (event: unknown) => void) => listeners.set(name, fn),
   });
   listeners.get('message')!({ source: parent, data: { type: 'cea:canvas-navigation', value: { panX: true, panY: true, zoom: true } } });
@@ -58,5 +58,17 @@ describe('iframe wheel ownership', () => {
     const h = harness('contain', true);
     expect(h.wheel(-100, true).preventDefault).toHaveBeenCalledOnce();
     expect(h.postMessage).toHaveBeenCalledOnce();
+  });
+
+  it.each(['hidden', 'clip'])('a root with overflow %s does not claim wheel input it cannot scroll', overflow => {
+    const h = harness('contain', false, { root: true, overflow });
+    expect(h.wheel(100).preventDefault).toHaveBeenCalledOnce();
+    expect(h.postMessage).toHaveBeenCalledOnce();
+  });
+
+  it('a visibly scrollable document keeps native wheel input', () => {
+    const h = harness('auto', false, { root: true, overflow: 'visible' });
+    expect(h.wheel(100).preventDefault).not.toHaveBeenCalled();
+    expect(h.postMessage).not.toHaveBeenCalled();
   });
 });

@@ -190,7 +190,8 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
       </section>}
 
       <div className="studio-body">
-        <DeviceWorkspace background={background} onBackgroundChange={setBackground}><section className="panel panel-preview" aria-label="预览">
+        <DeviceWorkspace fullscreen={fullscreen.active} background={background} onBackgroundChange={setBackground}><section className="panel panel-preview" aria-label="预览">
+          <FullscreenFrame fullscreen={fullscreen}>
           <div className="panel-bar">
             {asset.frameworks.length > 1 && <SelectControl label="实现框架" value={fw} onValueChange={setFramework} icon={<Code size={14} />}
               options={asset.frameworks.map(f => ({ value: f, label: frameworkLabel(f) }))} />}
@@ -203,16 +204,14 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
               <button type="button" className="icon-btn" aria-label="重播" title="重播" onClick={() => { setPlaying(true); setReloadKey(k => k + 1); }}>
                 <RotateCcw size={16} strokeWidth={1.8} aria-hidden="true" />
               </button>
-              <FullscreenButton active={fullscreen.active} onToggle={fullscreen.toggle} />
             </div>
           </div>
           <div className="panel-subbar">
             <DeviceTools />
-            <DeviceZoom />
+            <DeviceZoom><FullscreenButton active={fullscreen.active} onToggle={fullscreen.toggle} /></DeviceZoom>
           </div>
-          <FullscreenFrame fullscreen={fullscreen}>
           <div className={`preview-well${background === 'dark' ? ' theme-dark' : ''}`}>
-            <DeviceCanvas fullscreen={fullscreen.active}>{(device, onBounds, framing) =>
+            <DeviceCanvas>{(device, onBounds, framing) =>
               <PreviewStages key={`${initialAsset.id}:${initialAsset.updatedAt}`} assetId={asset.id} framework={fw} version={initialAsset.updatedAt} title={title} componentTheme={previewTheme} theme={background === 'dark' ? 'dark' : 'light'} reloadKey={reloadKey} active={playing} onResume={resumePreview} device={device} framing={framing} onBounds={onBounds} />
             }</DeviceCanvas>
           </div>

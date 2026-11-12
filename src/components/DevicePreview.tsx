@@ -166,13 +166,13 @@ function screenTurn(angle: number) {
  * 缩放、旋转和平移都只改 transform，组件不会重新排版，也不改变任何元素的尺寸，所以不会抖、不出现滚动条；
  * 放大后拖动空白处、滚轮或右侧和底部的细条都能移动画面，Ctrl/⌘ + 滚轮（触控板双指捏合）以指针位置缩放。
  * 只有换设备、改尺寸，以及开启「画面自动转正」后转过 45° 时，页面才按新的宽高重新排版，这和真机一致。
- * 全屏时去掉外壳，按整个屏幕排版，和在浏览器里直接打开一样；结构不变，iframe 不会重新加载。
+ * 全屏按实际窗口排版，设备外壳不参与全屏尺寸。
  */
 export function DevicePreview({ view, fullscreen = false, active = true, bounds, onFitScale, onZoomChange, children }: {
   view: DeviceView;
   active?: boolean;
-  bounds?: PreviewBounds | null;
   fullscreen?: boolean;
+  bounds?: PreviewBounds | null;
   onFitScale?: (scale: number) => void;
   onZoomChange?: (zoom: number) => void;
   children: React.ReactNode;
@@ -180,11 +180,11 @@ export function DevicePreview({ view, fullscreen = false, active = true, bounds,
   return <TransformWrapper minScale={0.05} maxScale={MAX_ZOOM} centerZoomedOut disablePadding smooth={false}
     doubleClick={{ disabled: true }} velocityAnimation={{ disabled: true }}
     autoAlignment={{ disabled: true, animationTime: 0 }} zoomAnimation={{ disabled: true }}
-    wheel={{ disabled: fullscreen, activationKeys: keys => keys.includes('Control') || keys.includes('Meta') }}
-    trackPadPanning={{ disabled: fullscreen, activationKeys: keys => !keys.includes('Control') && !keys.includes('Meta'), velocityDisabled: true }}
+    wheel={{ disabled: false, activationKeys: keys => keys.includes('Control') || keys.includes('Meta') }}
+    trackPadPanning={{ disabled: false, activationKeys: keys => !keys.includes('Control') && !keys.includes('Meta'), velocityDisabled: true }}
     onWheel={(ref, event) => { if (event.ctrlKey || event.metaKey) onZoomChange?.(ref.state.scale); }}
     onPinch={ref => onZoomChange?.(ref.state.scale)}
-    pinch={{ disabled: fullscreen }} panning={{ disabled: fullscreen, velocityDisabled: true, allowRightClickPan: false }}>
+    pinch={{ disabled: false }} panning={{ disabled: false, velocityDisabled: true, allowRightClickPan: false }}>
     <DevicePreviewCanvas view={view} fullscreen={fullscreen} active={active} bounds={bounds} onFitScale={onFitScale}>{children}</DevicePreviewCanvas>
   </TransformWrapper>;
 }
@@ -192,8 +192,8 @@ export function DevicePreview({ view, fullscreen = false, active = true, bounds,
 function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitScale, children }: {
   view: DeviceView;
   active: boolean;
-  bounds?: PreviewBounds | null;
   fullscreen?: boolean;
+  bounds?: PreviewBounds | null;
   onFitScale?: (scale: number) => void;
   children: React.ReactNode;
 }) {
@@ -207,8 +207,12 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
     const instance = controls.instance;
     // display:none 的 Tab 不参与库的边界对齐；再次显示时沿用原来的缩放与位置。
     if (!active) instance.observer?.disconnect();
-    else if (instance.wrapperComponent && instance.contentComponent) instance.observeSizes(instance.wrapperComponent, instance.contentComponent);
-  }, [active, controls.instance]);
+    else if (instance.wrapperComponent && instance.contentComponent) {
+      instance.observeSizes(instance.wrapperComponent, instance.contentComponent);
+      // 组件内容会自行变形；库只观察工作区尺寸，不随每一帧内容尺寸重新居中。
+      if (!fullscreen && view.framing === 'content') instance.observer?.unobserve(instance.contentComponent);
+    }
+  }, [active, controls.instance, fullscreen, view.framing]);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
@@ -220,11 +224,11 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
   }, []);
 
   const physical = fullscreen && box ? { width: Math.round(box.width), height: Math.round(box.height) } : deviceViewport;
-  const inspect = view.framing === 'content' && !fullscreen;
+  const inspect = !fullscreen && view.framing === 'content';
   const bezel = fullscreen || inspect ? { side: 0, top: 0 } : BEZEL[view.device];
   const room = fullscreen ? 0 : ROOM;
   const angle = fullscreen || inspect ? 0 : view.angle;
-  const turn = !fullscreen && view.autoRotate ? screenTurn(angle) : 0;
+  const turn = !inspect && view.autoRotate ? screenTurn(angle) : 0;
   const content = Math.abs(turn) === 90 ? { width: physical.height, height: physical.width } : physical;
   const shell = { width: physical.width + bezel.side * 2, height: physical.height + bezel.top + bezel.side };
   // 转到任意角度时按外接矩形算大小
@@ -234,12 +238,17 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
   const focus = inspect && bounds ? bounds : { x: 0, y: 0, ...shell };
   const outer = { width: focus.width * cos + focus.height * sin, height: focus.width * sin + focus.height * cos };
   const fit = box ? Math.max(0.05, Math.min(1, (box.width - room * 2) / outer.width, (box.height - room * 2) / outer.height)) : 0;
-  const requestedScale = fullscreen ? 1 : view.zoom === 'fit' ? fit : view.zoom;
+  // 素材内部尺寸变化不驱动外层缩放；窗口变化或再次点击适应时才重新取景。
+  const fitKey = `${fullscreen}:${view.framing}:${view.device}:${physical.width}x${physical.height}:${box?.width}x${box?.height}:${view.fitRequest}:${Boolean(inspect && bounds)}:${view.zoom === 'fit'}`;
+  const [fitted, setFitted] = useState({ key: fitKey, scale: fit });
+  if (fitted.key !== fitKey) setFitted({ key: fitKey, scale: fit });
+  const fittedScale = fitted.key === fitKey ? fitted.scale : fit;
+  const requestedScale = view.zoom === 'fit' ? fittedScale : view.zoom;
   const scale = transform.scale;
 
   const report = useRef(onFitScale);
   report.current = onFitScale;
-  useEffect(() => { if (fit) report.current?.(Math.round(fit * 100) / 100); }, [fit]);
+  useEffect(() => { if (fittedScale) report.current?.(Math.round(fittedScale * 100) / 100); }, [fittedScale]);
 
   // 平移：设备中心相对预览区中心的偏移。只在设备比预览区大的方向上可以移动
   const limit = {
@@ -275,11 +284,11 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
   useEffect(() => {
     const hostElement = host.current!;
     const send = (frame: HTMLIFrameElement) => frame.contentWindow?.postMessage({
-      type: 'cea:canvas-navigation', value: { panX: !fullscreen && limit.x > 0, panY: !fullscreen && limit.y > 0, zoom: !fullscreen },
+      type: 'cea:canvas-navigation', value: { panX: limit.x > 0, panY: limit.y > 0, zoom: true },
     }, '*');
     const forward = (event: WheelEvent) => {
       const wrapper = controls.instance.wrapperComponent;
-      if (!wrapper || fullscreen) return;
+      if (!wrapper) return;
       const navigation = event.ctrlKey || event.metaKey || limit.x > 0 || limit.y > 0;
       if (!navigation) { event.stopPropagation(); return; }
       if (wrapper.contains(event.target as Node)) return;
@@ -294,7 +303,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
       if (!frame) return;
       if (event.data?.type === 'cea:ready' || event.data?.type === 'cea:boot') { send(frame); sendVisibleArea.current(frame); return; }
       const value = event.data?.value;
-      if (fullscreen || event.data?.type !== 'cea:canvas-wheel' || !value || ![value.dx, value.dy, value.x, value.y].every(Number.isFinite)) return;
+      if (event.data?.type !== 'cea:canvas-wheel' || !value || ![value.dx, value.dy, value.x, value.y].every(Number.isFinite)) return;
       const rect = frame.getBoundingClientRect();
       controls.instance.wrapperComponent?.dispatchEvent(new WheelEvent('wheel', {
         deltaX: value.dx, deltaY: value.dy, clientX: rect.x + value.x * rect.width, clientY: rect.y + value.y * rect.height,
@@ -308,7 +317,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
       hostElement.removeEventListener('wheel', forward, true);
       window.removeEventListener('message', receive);
     };
-  }, [fullscreen, limit.x > 0, limit.y > 0, controls.instance]);
+  }, [limit.x > 0, limit.y > 0, controls.instance]);
   const layoutFade = useRef<Animation | null>(null);
   const turnFade = useRef<Animation | null>(null);
   useEffect(() => () => {
@@ -318,18 +327,23 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
 
   const layout = `${fullscreen}:${view.framing}:${view.device}:${physical.width}x${physical.height}`;
   const contentRef = useRef<HTMLDivElement>(null);
-  const last = useRef({ layout, angle, turn, width: outer.width, height: outer.height, centerRequest: view.centerRequest });
+  const last = useRef({ layout, angle, turn, width: outer.width, height: outer.height, hostWidth: 0, hostHeight: 0, centerRequest: view.centerRequest, fitRequest: view.fitRequest, measured: Boolean(bounds) });
   useLayoutEffect(() => {
     if (!box || !requestedScale || !controls.instance.isInitialized) return;
     const prev = last.current;
-    last.current = { layout, angle, turn, width: outer.width, height: outer.height, centerRequest: view.centerRequest };
-    const resized = prev.layout !== layout || prev.width !== outer.width || prev.height !== outer.height;
+    last.current = { layout, angle, turn, width: outer.width, height: outer.height, hostWidth: box.width, hostHeight: box.height, centerRequest: view.centerRequest, fitRequest: view.fitRequest, measured: Boolean(bounds) };
+    const resized = prev.layout !== layout || !inspect && (prev.width !== outer.width || prev.height !== outer.height);
+    const hostResized = prev.hostWidth !== box.width || prev.hostHeight !== box.height;
+    const refit = prev.fitRequest !== view.fitRequest || !prev.measured && Boolean(bounds) || !prev.hostWidth || view.zoom === 'fit' && hostResized;
     if (prev.centerRequest !== view.centerRequest && !resized) {
       void controls.centerView(undefined, 0);
       return;
     }
-    if (resized || view.zoom === 'fit' || fullscreen) {
+    if (resized || refit) {
       void controls.setTransform((box.width - outer.width * requestedScale) / 2, (box.height - outer.height * requestedScale) / 2, requestedScale, 0);
+    } else if (prev.hostWidth && (prev.hostWidth !== box.width || prev.hostHeight !== box.height)) {
+      void controls.setTransform(controls.state.positionX + (box.width - prev.hostWidth) / 2,
+        controls.state.positionY + (box.height - prev.hostHeight) / 2, requestedScale, 0);
     } else if (Math.abs(controls.state.scale - requestedScale) > 0.0001) {
       const rect = host.current!.getBoundingClientRect();
       void controls.zoomToPoint(requestedScale, rect.x + rect.width / 2, rect.y + rect.height / 2, 0);
@@ -337,7 +351,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
     if (prev.layout !== layout) {
       layoutFade.current?.cancel();
       turnFade.current?.cancel();
-      if (!reducedMotion()) layoutFade.current = shellRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' }) ?? null;
+      if (!fullscreen && !reducedMotion()) layoutFade.current = shellRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' }) ?? null;
       return;
     }
     if (prev.turn !== turn && !view.rotating && !reducedMotion()) {
@@ -395,7 +409,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
   }, []);
 
   const [dragging, setDragging] = useState(false);
-  const canPan = !fullscreen && (limit.x > 0 || limit.y > 0);
+  const canPan = limit.x > 0 || limit.y > 0;
   const startDrag = (e: React.PointerEvent, map: (dx: number, dy: number) => { x: number; y: number }) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -436,7 +450,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
   const physicalLandscape = physical.width > physical.height;
   const contentLandscape = content.width > content.height;
   return <div ref={host}
-    className={`device-preview${fullscreen ? ' is-fullscreen' : ''}${inspect ? ' is-content' : ''}${view.rotating || inspect || dragging ? ' is-direct' : ''}${!fullscreen && (spaceHeld || view.panMode) ? ' is-space' : ''}${canPan ? ' can-pan' : ''}${dragging ? ' is-panning' : ''}`}
+    className={`device-preview${fullscreen ? ' is-fullscreen' : ''}${inspect ? ' is-content' : ''}${view.rotating || inspect || dragging ? ' is-direct' : ''}${spaceHeld || view.panMode ? ' is-space' : ''}${canPan ? ' can-pan' : ''}${dragging ? ' is-panning' : ''}`}
     onPointerEnter={() => { hovered.current = true; }} onPointerLeave={() => { hovered.current = false; }}>
     <TransformComponent wrapperClass="device-transform-viewport" contentClass="device-stage"
       wrapperStyle={{ width: '100%', height: '100%', overflow: 'clip' }}

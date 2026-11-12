@@ -94,7 +94,7 @@ for (const editor of [false, true]) {
   });
 }
 
-test('phone content scrolls within the device, and fullscreen uses the full canvas', async ({ page }) => {
+test('phone content scrolls within the device, and fullscreen fills the actual viewport', async ({ page }) => {
   await openFixture(page);
   await page.getByRole('radio', { name: '手机', exact: true }).check();
   const frame = page.frameLocator('iframe');
@@ -113,9 +113,12 @@ test('phone content scrolls within the device, and fullscreen uses the full canv
   await expect.poll(async () => {
     const size = await page.locator('.device-preview').evaluate(element => ({ width: Math.round(element.clientWidth), height: Math.round(element.clientHeight) }));
     const viewport = await frame.locator('html').evaluate(() => ({ width: innerWidth, height: innerHeight }));
-    return { viewport, size };
-  }).toEqual({ viewport: { width: 1440, height: 900 }, size: { width: 1440, height: 900 } });
-  await page.locator('.fullscreen-exit').getByRole('button', { name: '退出全屏', exact: true }).click();
+    return { viewport, expanded: size.width > 1000 && size.height > 600 };
+  }).toEqual({ viewport: { width: 1440, height: 900 }, expanded: true });
+  await expect(page.getByRole('button', { name: '完整显示', exact: true })).not.toBeVisible();
+  await page.getByRole('button', { name: '展开预览工具', exact: true }).click();
+  await expect(page.getByRole('button', { name: '完整显示', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
   await expect.poll(() => frame.locator('html').evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual({ width: 390, height: 844 });
   await expect(page.locator('iframe')).toHaveAttribute('data-session', 'preserved');
 });

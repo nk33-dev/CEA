@@ -44,6 +44,8 @@ html,body{margin:0;min-height:100%}
 /* 缩放 iframe 内的顶层弹层单独合成，避免文字在重绘时交替出现重影；关闭后不保留图层。 */
 :where([popover]:popover-open){will-change:transform}
 html{scrollbar-width:thin}
+/* 组件已完整处于视口内时，舞台 padding 不应单独生成文档滚动条。 */
+:root[data-framing="content"][data-content-fits]{overflow:clip}
 :root[data-thumbnail],:root[data-thumbnail] body{scrollbar-width:none!important;scrollbar-gutter:auto!important}
 :root[data-thumbnail]::-webkit-scrollbar,:root[data-thumbnail] body::-webkit-scrollbar{display:none!important}
 /* 缩放 iframe 的系统菜单会错位；此规则必须压过素材的 appearance:none!important。 */
@@ -107,6 +109,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   var requestedInteractive = params.get('interactive')==='1';
   var previewReady = false;
   var warming = false;
+  var boundsObserver=null,boundsObserved=new Set();
   document.addEventListener('DOMContentLoaded', function() {
     var fonts = document.fonts ? document.fonts.ready : Promise.resolve();
     fonts.then(function() {
@@ -121,7 +124,11 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
         } else setActive(requestedActive&&!document.hidden, requestedInteractive);
         reportBounds();
         parent.postMessage({ type: 'cea:ready', bounds: contentBounds() }, '*');
-        if (window.ResizeObserver) new ResizeObserver(function() { nativeFrame(reportBounds); }).observe(document.body);
+        if (window.ResizeObserver) {
+          boundsObserver=new ResizeObserver(function() { nativeFrame(reportBounds); });
+          observeBounds([]);
+          reportBounds();
+        }
       }); });
     });
   }, { once: true });
@@ -161,13 +168,23 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
       if(!inner.length)break;
       items=inner;
     }
+    observeBounds(items);
     var l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;
     items.forEach(function(el){
       var rect=layoutRect(el);
       l=Math.min(l,rect.left);t=Math.min(t,rect.top);r=Math.max(r,rect.right);b=Math.max(b,rect.bottom);
     });
+    document.documentElement.toggleAttribute('data-content-fits',
+      document.documentElement.dataset.framing!=='device'&&Number.isFinite(l)&&l>=0&&t>=0&&r<=innerWidth&&b<=innerHeight);
     l=Math.max(0,l);t=Math.max(0,t);r=Math.min(innerWidth,r);b=Math.min(innerHeight,b);
     return r>l&&b>t?{x:l,y:t,width:r-l,height:b-t}:null;
+  }
+  function observeBounds(items){
+    if(!boundsObserver)return;
+    var next=new Set([document.body].concat(items));
+    boundsObserved.forEach(function(el){if(!next.has(el))boundsObserver.unobserve(el);});
+    next.forEach(function(el){if(!boundsObserved.has(el))boundsObserver.observe(el);});
+    boundsObserved=next;
   }
   var lastBounds='';
   function reportBounds(){

@@ -7,10 +7,13 @@ import type { ComponentTheme } from '../../shared/theme.ts';
 
 interface AppearanceProps { background: ComponentTheme; onBackgroundChange: (value: ComponentTheme) => void }
 
-function useWorkspaceState({ background, onBackgroundChange }: AppearanceProps) {
-  const [view, setView] = useState<DeviceView>(DEFAULT_DEVICE_VIEW);
+function useWorkspaceState({ background, onBackgroundChange, fullscreen = false }: AppearanceProps & { fullscreen?: boolean }) {
+  const [normalView, setNormalView] = useState<DeviceView>(DEFAULT_DEVICE_VIEW);
+  const [fullView, setFullView] = useState<DeviceView>({ ...DEFAULT_DEVICE_VIEW, framing: 'device', zoom: 1 });
+  const view = fullscreen ? fullView : normalView;
+  const setView = fullscreen ? setFullView : setNormalView;
   const [fitScale, setFitScale] = useState(1);
-  const state = useMemo(() => ({ view, setView, setFitScale, background, onBackgroundChange }), [view, background, onBackgroundChange]);
+  const state = useMemo(() => ({ view, setView, setFitScale, background, onBackgroundChange, fullscreen }), [view, setView, background, onBackgroundChange, fullscreen]);
   return { state, fitScale };
 }
 
@@ -24,7 +27,7 @@ function useWorkspace() {
 }
 
 /** 旋转和缩放只更新订阅设备状态的控件与画布，不触发页面及复用内容重渲染。 */
-export function DeviceWorkspace({ children, ...appearance }: AppearanceProps & { children: ReactNode }) {
+export function DeviceWorkspace({ children, ...appearance }: AppearanceProps & { children: ReactNode; fullscreen?: boolean }) {
   const { state, fitScale } = useWorkspaceState(appearance);
   return <WorkspaceContext.Provider value={state}>
     <FitScaleContext.Provider value={fitScale}>{children}</FitScaleContext.Provider>
@@ -32,7 +35,8 @@ export function DeviceWorkspace({ children, ...appearance }: AppearanceProps & {
 }
 
 export function DeviceTools() {
-  const { view, setView } = useWorkspace();
+  const { view, setView, fullscreen } = useWorkspace();
+  if (fullscreen) return <span className="panel-label">全屏预览</span>;
   return <DeviceControl view={view} onChange={setView} />;
 }
 
@@ -41,19 +45,20 @@ export function DeviceBackground() {
   return <PreviewBackgroundToggle value={background} onChange={onBackgroundChange} />;
 }
 
-export function DeviceZoom() {
+export function DeviceZoom({ children }: { children?: ReactNode }) {
   const { view, setView } = useWorkspace();
   const fitScale = useContext(FitScaleContext);
-  return <ZoomControl value={view.zoom} fitScale={fitScale}
+  return <div className="preview-navigation"><ZoomControl value={view.zoom} fitScale={fitScale}
     onChange={zoom => setView(previous => ({ ...previous, zoom }))}
     panning={view.panMode ?? false} onPan={() => setView(previous => ({ ...previous, panMode: !previous.panMode }))}
     onFit={() => setView(previous => ({ ...previous, zoom: 'fit', panMode: false, fitRequest: (previous.fitRequest ?? 0) + 1 }))}
-    onCenter={() => setView(previous => ({ ...previous, centerRequest: (previous.centerRequest ?? 0) + 1 }))} />;
+    onCenter={() => setView(previous => ({ ...previous, centerRequest: (previous.centerRequest ?? 0) + 1 }))} />
+    {children}</div>;
 }
 
-export function DeviceCanvas({ fullscreen, active = true, children }: { fullscreen: boolean; active?: boolean; children: (device: PreviewDevice, onBounds: (bounds: PreviewBounds | null) => void, framing: PreviewFraming) => ReactNode }) {
-  const { view, setView, setFitScale } = useWorkspace();
+export function DeviceCanvas({ active = true, children }: { active?: boolean; children: (device: PreviewDevice, onBounds: (bounds: PreviewBounds | null) => void, framing: PreviewFraming) => ReactNode }) {
+  const { view, setView, setFitScale, fullscreen } = useWorkspace();
   const [bounds, setBounds] = useState<PreviewBounds | null>();
   return <DevicePreview view={view} bounds={bounds} fullscreen={fullscreen} active={active} onFitScale={setFitScale}
-    onZoomChange={zoom => setView(previous => ({ ...previous, zoom }))}>{children(view.device, setBounds, fullscreen ? 'device' : view.framing ?? 'device')}</DevicePreview>;
+    onZoomChange={zoom => setView(previous => ({ ...previous, zoom }))}>{children(view.device, setBounds, view.framing ?? 'device')}</DevicePreview>;
 }

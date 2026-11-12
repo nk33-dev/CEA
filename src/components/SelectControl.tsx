@@ -14,7 +14,7 @@ interface SelectOption {
   separated?: boolean;
 }
 
-export function SelectControl({ value, onValueChange, options, label, placeholder = '请选择', disabled, fullWidth, filter, icon, align }: {
+export function SelectControl({ value, onValueChange, options, label, placeholder = '请选择', disabled, fullWidth, filter, icon, align, iconOnly }: {
   value: string;
   onValueChange: (value: string) => void;
   options: SelectOption[];
@@ -25,8 +25,10 @@ export function SelectControl({ value, onValueChange, options, label, placeholde
   filter?: boolean;
   icon?: ReactNode;
   align?: 'start' | 'end';
+  iconOnly?: boolean;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
+  const fullscreenOwner = useRef<HTMLElement | null>(null);
   const [container, setContainer] = useState<HTMLElement>();
   const [inputMode, setInputMode] = useState<'pointer' | 'keyboard'>('pointer');
   const index = options.findIndex(option => option.value === value);
@@ -35,16 +37,25 @@ export function SelectControl({ value, onValueChange, options, label, placeholde
       onValueChange={next => { const option = options[Number(next)]; if (option) onValueChange(option.value); }}
       onOpenChange={open => {
         // 原生 dialog 外的 Portal 会被浏览器设为不可交互。
-        if (open) setContainer(trigger.current?.closest('dialog') ?? document.body);
+        if (open) {
+          fullscreenOwner.current = trigger.current?.closest<HTMLElement>('.fullscreen-frame.is-active') ?? null;
+          setContainer(trigger.current?.closest('dialog') ?? fullscreenOwner.current ??
+            (document.fullscreenElement as HTMLElement | null) ?? document.body);
+        }
       }}>
-      <Select.Trigger ref={trigger} className={`cea-select-trigger${fullWidth ? ' is-full' : ''}${filter ? ' is-filter' : ''}`} aria-label={label} title={label}
+      <Select.Trigger ref={trigger} className={`cea-select-trigger${fullWidth ? ' is-full' : ''}${filter ? ' is-filter' : ''}${iconOnly ? ' is-icon-only' : ''}`} aria-label={label} title={label}
         onPointerDown={() => setInputMode('pointer')} onKeyDown={() => setInputMode('keyboard')}>
         {icon && <span className="cea-select-leading" aria-hidden="true">{icon}</span>}
-        <Select.Value placeholder={placeholder} />
+        {iconOnly ? <span hidden><Select.Value placeholder={placeholder} /></span> : <Select.Value placeholder={placeholder} />}
         <Select.Icon className="cea-select-chevron"><ChevronDown size={14} aria-hidden="true" /></Select.Icon>
       </Select.Trigger>
       <Select.Portal container={container}>
         <Select.Content className={`option-surface cea-select-content${filter ? ' is-filter' : ''}`} position="popper" sideOffset={6} collisionPadding={12} align={align ?? (filter ? 'end' : 'start')}
+          onCloseAutoFocus={event => {
+            // 下拉的退出动画可能晚于全屏退出，不能再抢回焦点。
+            if (fullscreenOwner.current && !fullscreenOwner.current.classList.contains('is-active')) event.preventDefault();
+            fullscreenOwner.current = null;
+          }}
           data-input={inputMode} onKeyDownCapture={() => setInputMode('keyboard')} onPointerMoveCapture={() => setInputMode('pointer')}>
           <Select.ScrollUpButton className="cea-select-scroll"><ChevronUp size={14} aria-hidden="true" /></Select.ScrollUpButton>
           <Select.Viewport className="cea-select-viewport">

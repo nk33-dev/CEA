@@ -92,6 +92,6 @@ export function Tooltips() {
   if (!tip) return null;
   return createPortal(
     <div ref={element} className={`tooltip${tip.below ? ' is-below' : ''}`} role="tooltip" style={{ left: tip.x, top: tip.y }}>{tip.text}</div>,
-    document.body,
+    document.fullscreenElement ?? document.querySelector('.fullscreen-frame.is-active') ?? document.body,
   );
 }
