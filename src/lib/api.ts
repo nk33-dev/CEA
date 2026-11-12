@@ -11,7 +11,7 @@ export class ApiError extends Error {
   }
 }
 
-const OFFLINE = '连不上本地服务，请确认 npm run dev 仍在运行';
+const OFFLINE = '连不上本地服务，请确认 CEA 服务仍在运行';
 
 async function request<T>(method: string, url: string, body?: unknown, raw?: Blob, signal?: AbortSignal): Promise<T> {
   let res: Response;
@@ -68,7 +68,7 @@ async function download(method: string, url: string, body?: unknown) {
 }
 
 export const api = {
-  library: () => request<LibraryInfo>('GET', '/api/library'),
+  library: () => request<LibraryInfo | null>('GET', '/api/library'),
   switchLibrary: (path: string) => request<LibraryInfo>('PUT', '/api/library', { path }),
   forgetRecent: (path: string) => request<LibraryInfo>('DELETE', '/api/library/recent', { path }),
 

@@ -125,6 +125,7 @@ export function EditPage() {
   const [restored, setRestored] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  const [pasteError, setPasteError] = useState('');
   const [fileDialog, setFileDialog] = useState(false);
   const [fileName, setFileName] = useState('');
   const [fileError, setFileError] = useState('');
@@ -297,7 +298,7 @@ export function EditPage() {
   const applyPaste = () => {
     const parsed = parseReplicaPrompt(pasteText);
     if (!parsed) {
-      notify('没认出来。需要 transitions.dev 的 Copy prompt 原文，开头是 Add the "…" component');
+      setPasteError('没有找到 HTML 代码。请粘贴 HTML 源码或带 HTML 代码块的复刻提示词；多文件组件请通过文件夹导入。');
       return;
     }
     const html: Draft['variants'][number] = {
@@ -402,7 +403,7 @@ export function EditPage() {
           {!editing && (
             <button type="button" className="btn btn-quiet" onClick={() => setPasteOpen(true)}>
               <ClipboardPaste size={15} strokeWidth={1.8} aria-hidden="true" />
-              从 transitions.dev 导入
+              粘贴代码
             </button>
           )}
           <Link to={editing ? `/a/${id}` : '/'} className="btn btn-quiet">取消</Link>
@@ -597,7 +598,7 @@ export function EditPage() {
             <div className="field-row field-row-even">
               <label className="field">
                 <span>来源名称</span>
-                <input value={draft.sourceName} onChange={e => set('sourceName', e.target.value)} placeholder="transitions.dev Community" />
+                <input value={draft.sourceName} onChange={e => set('sourceName', e.target.value)} placeholder="作者、网站或项目名称（选填）" />
               </label>
               <label className="field">
                 <span>来源地址</span>
@@ -664,7 +665,7 @@ export function EditPage() {
       <Dialog
         open={pasteOpen}
         onClose={() => setPasteOpen(false)}
-        title="从 transitions.dev 导入"
+        title="粘贴代码"
         wide
         footer={
           <>
@@ -673,9 +674,10 @@ export function EditPage() {
           </>
         }
       >
-        <p>在 transitions.dev 的组件页点 Copy prompt，粘贴到下面，会填好名称、来源、英文简介和 HTML 代码。其他来源的组件请在导入导出页按素材文件夹导入。</p>
-        <textarea className="paste-area" value={pasteText} onChange={e => setPasteText(e.target.value)}
-          placeholder={'Add the "…" component to my project. It comes from the transitions.dev Community: https://…'} spellCheck={false} autoFocus />
+        <p>粘贴 HTML 源码或带 HTML 代码的复刻提示词。能识别的名称、来源和代码会填入表单，保存前可以修改。</p>
+        <textarea className="paste-area" aria-label="HTML 代码或复刻提示词" value={pasteText} onChange={e => { setPasteText(e.target.value); setPasteError(''); }}
+          placeholder={'<div class="card">…</div>\n<style>…</style>\n<script>…</script>'} spellCheck={false} autoFocus />
+        {pasteError && <p className="form-error" role="alert">{pasteError}</p>}
       </Dialog>
 
       <Dialog

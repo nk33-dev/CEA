@@ -12,6 +12,7 @@ interface LibraryContextValue {
   refresh: () => Promise<void>;
   revision: number;
   loadError: string | null;
+  initialized: boolean;
   notify: (text: string) => void;
 }
 
@@ -29,20 +30,29 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [tags, setTags] = useState<TagCount[]>([]);
   const [revision, setRevision] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const toastEl = useRef<HTMLDivElement>(null);
   const toast = useRef<ToastHandle | null>(null);
+  const loadVersion = useRef(0);
 
   const refresh = useCallback(async () => {
+    const version = ++loadVersion.current;
     try {
-      const [i, c, t] = await Promise.all([api.library(), api.categories(), api.tags()]);
+      const i = await api.library();
+      const [c, t] = i ? await Promise.all([api.categories(), api.tags()]) : [[], []];
+      if (version !== loadVersion.current) return;
       setInfo(i);
       setCategories(c);
       setTags(t);
       setLoadError(null);
     } catch (e) {
-      setLoadError(errorMessage(e));
+      if (version === loadVersion.current) setLoadError(errorMessage(e));
+    } finally {
+      if (version === loadVersion.current) {
+        setInitialized(true);
+        setRevision(r => r + 1);
+      }
     }
-    setRevision(r => r + 1);
   }, []);
 
   useEffect(() => {
@@ -57,7 +67,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const notify = useCallback((text: string) => toast.current?.show(text, { duration: 4000 }), []);
 
   return (
-    <LibraryContext.Provider value={{ info, categories, tags, refresh, revision, loadError, notify }}>
+    <LibraryContext.Provider value={{ info, categories, tags, refresh, revision, loadError, initialized, notify }}>
       {children}
       <div ref={toastEl} className="t-toast toast" role="status" aria-live="polite" aria-hidden="true" inert>
         <span data-toast-message />

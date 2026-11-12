@@ -2,7 +2,7 @@ import type { Variant } from './types.ts';
 
 /**
  * 从代码里整理出给人看的说明，不用翻代码也知道：
- * - 动效参数：style.css 开头的 @motion 注释（transitions.dev 的格式）配上 CSS 变量的初始声明
+ * - 动效参数：style.css 开头的 @motion 注释配上 CSS 变量的初始声明
  * - 附注：版权、许可和「Touch: …」这类带标签的说明注释
  */
 

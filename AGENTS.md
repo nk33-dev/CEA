@@ -5,6 +5,8 @@
 - Keep collected components, prompts, media, databases and backups in the external library, not in this repository.
 - Do not add bundled materials or asset-specific source-rewriting migrations to the application.
 - Use small synthetic fixtures in unit tests. Never read or modify the user's real library in unit tests.
+- First use requires an explicit library location. Do not guess a drive or create a default library; preserve each user's saved selection.
+- Source name and URL are optional user metadata. Keep them editable and preserve imported values without tying entry points to a provider brand.
 - CEA application code uses PolyForm Noncommercial 1.0.0. Third-party dependencies and imported assets retain their own licenses.
 
 ## Preview And Reuse

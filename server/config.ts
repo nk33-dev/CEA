@@ -53,19 +53,17 @@ export function forgetLibrary(root: string) {
   writeConfig({ ...config, recentLibraries: (config.recentLibraries ?? []).filter(p => !samePath(p, root)) });
 }
 
-/** Windows 上默认放在 E:\CEA-Assets（有 E 盘时），其他情况放在用户目录 */
-export const DEFAULT_LIBRARY = process.platform === 'win32' && fs.existsSync('E:/')
-  ? 'E:/CEA-Assets'
-  : path.join(os.homedir(), 'CEA-Assets');
-
-/** 优先级：命令行 --library > 环境变量 CEA_LIBRARY > 配置文件 > 默认目录 */
-export function resolveLibraryPath(argv: string[]): { path: string; fromConfig: boolean } {
+/** 未选择素材库时返回 null，由首次配置流程选择位置。 */
+export function resolveLibraryPath(argv: string[]): { path: string; fromConfig: boolean } | null {
   const i = argv.indexOf('--library');
-  if (i >= 0 && argv[i + 1]) return { path: path.resolve(argv[i + 1]), fromConfig: false };
+  if (i >= 0) {
+    if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error('--library 后需要填写素材库路径');
+    return { path: path.resolve(argv[i + 1]), fromConfig: false };
+  }
   if (process.env.CEA_LIBRARY) return { path: path.resolve(process.env.CEA_LIBRARY), fromConfig: false };
   const saved = readConfig().libraryPath;
   if (saved) return { path: saved, fromConfig: true };
-  return { path: DEFAULT_LIBRARY, fromConfig: false };
+  return null;
 }
 
 /** 本机命令行脚本的位置，生成导入命令时用 */

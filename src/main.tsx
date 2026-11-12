@@ -1,10 +1,11 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, NavLink, Outlet, RouterProvider, ScrollRestoration, useNavigation } from 'react-router';
+import { createBrowserRouter, NavLink, Outlet, RouterProvider, ScrollRestoration, useNavigation, type RouteObject } from 'react-router';
 import { LibraryProvider, useLibrary } from './lib/store.tsx';
 import { api } from './lib/api.ts';
 import { loadDetailPage } from './lib/detailRoute.ts';
 import { Tooltips } from './components/Tooltips.tsx';
+import { LibrarySetup } from './components/LibrarySetup.tsx';
 import '@fontsource-variable/inter/wght.css';
 import './styles/toast-motion.css';
 import './styles/modal-motion.css';
@@ -47,7 +48,7 @@ function Shell() {
   );
 }
 
-const router = createBrowserRouter([
+const routes: RouteObject[] = [
   {
     element: <Shell />,
     HydrateFallback: Shell,
@@ -70,12 +71,17 @@ const router = createBrowserRouter([
       { path: '*', element: <div className="page-narrow"><div className="empty"><p className="empty-title">页面不存在</p><a className="btn" href="/">回到素材库</a></div></div> },
     ],
   },
-]);
+];
+
+function Application() {
+  const [router] = useState(() => createBrowserRouter(routes));
+  return <RouterProvider router={router} />;
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LibraryProvider>
-      <RouterProvider router={router} />
+      <LibrarySetup><Application /></LibrarySetup>
       <Tooltips />
     </LibraryProvider>
   </StrictMode>,

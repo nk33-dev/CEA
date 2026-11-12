@@ -7,6 +7,8 @@ import { strFromU8, strToU8 } from 'fflate';
 import { framework as frameworkInfo, FRAMEWORKS } from '../../shared/frameworks.ts';
 import { cliCommand, folderGuide } from '../../shared/folderGuide.ts';
 import { normalizeLocale } from '../../shared/locales.ts';
+import { splitHtml } from '../../shared/html.ts';
+export { splitHtml } from '../../shared/html.ts';
 import { ASSET_ID_PATTERN, extOf, isImage, isVideo, mimeOf, normalizeRelPath, slugify } from '../../shared/paths.ts';
 import type { AssetText, Variant } from '../../shared/types.ts';
 import { previewScale, previewViewport, type PreviewViewport } from '../../shared/preview.ts';
@@ -77,31 +79,6 @@ function idFrom(name: string) {
 
 function categoryId(name: string) {
   return `folder-${crypto.createHash('sha1').update(name.toLowerCase()).digest('hex').slice(0, 12)}`;
-}
-
-/** 一个 HTML 文件拆成 markup / style / script 三份 */
-export function splitHtml(source: string) {
-  const styles: string[] = [];
-  const scripts: string[] = [];
-  let html = source.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => {
-    styles.push(css.trim());
-    return '';
-  });
-  html = html.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (whole, attrs: string, js: string) => {
-    if (/\bsrc\s*=/.test(attrs) || /type\s*=\s*["']?(?!text\/javascript|module)[\w/+-]+/i.test(attrs)) return whole;
-    scripts.push(js.trim());
-    return '';
-  });
-  const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
-  if (body) {
-    // head 里的外链样式、字体保留到结构开头
-    const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? '';
-    const links = head.match(/<link\b[^>]*>/gi) ?? [];
-    html = [...links, body[1]].join('\n');
-  } else {
-    html = html.replace(/<!doctype[^>]*>|<\/?(html|head|body)\b[^>]*>|<meta\b[^>]*>|<title>[\s\S]*?<\/title>/gi, '');
-  }
-  return { markup: html.trim() + '\n', style: styles.join('\n\n') + (styles.length ? '\n' : ''), script: scripts.join('\n\n') + (scripts.length ? '\n' : '') };
 }
 
 const REACT_ENTRIES = ['Component', 'index', 'App', 'main'].flatMap(n => ['tsx', 'jsx', 'ts', 'js'].map(e => `${n}.${e}`));

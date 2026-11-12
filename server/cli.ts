@@ -55,7 +55,12 @@ const asJson = takeFlag('--json');
 const [command, ...rest] = argv;
 
 function openLibrary() {
-  return Library.open(libraryArg ? path.resolve(libraryArg) : resolveLibraryPath([]).path);
+  const target = libraryArg ? { path: path.resolve(libraryArg) } : resolveLibraryPath([]);
+  if (!target) throw new Error('尚未选择素材库。请先在页面中完成配置，或使用 --library <目录> 指定位置。');
+  if ('fromConfig' in target && target.fromConfig && Library.check(target.path) !== 'library') {
+    throw new Error('保存的素材库位置不可用，请重新选择或使用 --library <目录> 指定位置。');
+  }
+  return Library.open(target.path);
 }
 
 function fail(message: string): never {

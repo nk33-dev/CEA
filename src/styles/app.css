@@ -1325,6 +1325,34 @@ button.text-link { padding: 0; border: 0; background: none; cursor: pointer; }
 
 .reuse-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.setup { min-height: 100svh; padding: 28px 32px; }
+.setup-brand { display: flex; align-items: baseline; gap: 12px; }
+.setup-brand strong { font-size: 22px; }
+.setup-brand span { color: var(--fg-2); font-size: 13px; }
+.setup-content { width: min(100%, 620px); margin: 100px auto 40px; }
+.setup-heading { display: flex; align-items: center; gap: 12px; }
+.setup-heading svg { color: var(--fg-2); flex: none; }
+.setup-heading h1 { font-size: 26px; font-weight: 650; line-height: 1.35; letter-spacing: 0; }
+.setup-lead { margin-top: 14px; color: var(--fg-2); line-height: 1.8; }
+.setup-form { margin-top: 32px; }
+.setup-form > label { display: block; margin-bottom: 8px; font-weight: 550; }
+.setup-path { display: flex; align-items: stretch; gap: 8px; }
+.setup-path input { width: 100%; min-width: 0; height: 42px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); }
+.setup-path input:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.setup-path input[aria-invalid=true] { border-color: var(--danger); }
+.setup-path .btn { height: 42px; border-radius: 6px; flex: none; }
+.setup-help { margin-top: 10px; color: var(--fg-2); font-size: 13px; line-height: 1.7; }
+.setup-error { margin-top: 16px; color: var(--danger); overflow-wrap: anywhere; }
+.setup-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.setup-actions > span { color: var(--fg-2); font-size: 13px; }
+@media (max-width: 600px) {
+  .setup { padding: 20px; }
+  .setup-content { margin-top: 64px; }
+  .setup-heading h1 { font-size: 24px; }
+  .setup-actions { flex-wrap: wrap; }
+  .setup-actions .btn { margin-left: auto; }
+}
+
 /* 旋转设备的弹层：±90° 按钮、任意角度滑杆、画面自动转正 */
 .rotate-control { position: relative; display: inline-flex; }
 .rotate-shortcut { display: flex; align-items: center; border-radius: 6px; }

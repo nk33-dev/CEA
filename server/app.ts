@@ -18,7 +18,7 @@ import { zipSync } from 'fflate';
 import { parseThemeContract, resolveTheme } from '../shared/theme.ts';
 
 export interface AppState {
-  lib: Library;
+  lib: Library | null;
 }
 
 /** 文本文件统一按 UTF-8 返回，素材没写 <meta charset> 时也不会乱码 */
@@ -65,7 +65,15 @@ async function sendPlay(res: Response, key: string, title: string, variant: Vari
   res.type('text/html; charset=utf-8').send(html);
 }
 
-export function createApp(state: AppState, options: { distDir?: string } = {}) {
+export function createApp(current: AppState, options: { distDir?: string } = {}) {
+  // 文件夹选择在未配置时也可使用，依赖素材库的路由统一拒绝未配置状态。
+  const state = {
+    get lib(): Library {
+      if (!current.lib) throw new HttpError(409, '请先选择素材库位置');
+      return current.lib;
+    },
+    set lib(next: Library) { current.lib = next; },
+  };
   const app = express();
   app.disable('x-powered-by');
 
@@ -105,7 +113,7 @@ export function createApp(state: AppState, options: { distDir?: string } = {}) {
   // ---- 素材库 ----
 
   app.get('/api/library', (_req, res) => {
-    res.json(libraryInfo());
+    res.json(current.lib ? libraryInfo() : null);
   });
 
   app.delete('/api/library/recent', json, (req, res) => {
@@ -118,10 +126,20 @@ export function createApp(state: AppState, options: { distDir?: string } = {}) {
     if (!target || !path.isAbsolute(target)) throw badRequest('请填写素材库目录的完整路径');
     const kind = Library.check(target);
     if (kind === 'occupied') throw badRequest('该目录已有其他文件。请选择空目录或已有素材库。');
+    if (current.lib?.root === path.resolve(target)) {
+      rememberLibrary(current.lib.root);
+      res.json(libraryInfo());
+      return;
+    }
     const next = Library.open(target);
-    state.lib.close();
+    try {
+      rememberLibrary(next.root);
+    } catch (e) {
+      next.close();
+      throw e;
+    }
+    current.lib?.close();
     state.lib = next;
-    rememberLibrary(next.root);
     res.json(libraryInfo());
   }));
 

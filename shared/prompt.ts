@@ -3,6 +3,7 @@ import { fenceLang } from './paths.ts';
 import { locale } from './locales.ts';
 import { localizedTitle, translatedValue } from './contentLocale.ts';
 import { resolveTheme, themePrompt, type ReuseTheme } from './theme.ts';
+import { splitHtml } from './html.ts';
 
 /**
  * 每个素材提供三种复用内容，都从素材本身生成：
@@ -142,18 +143,27 @@ export interface ParsedReplica {
 }
 
 /**
- * 解析 transitions.dev 的 Copy prompt，拆出名称、来源、简介和三段代码；不是这种格式时返回 null。
- * 原文里 "Theme colors come from --stage-*…" 这类说明不保留。
+ * 解析带 HTML 代码的复刻提示词、HTML 代码块或页面源码；来源信息可选。
  */
 export function parseReplicaPrompt(text: string): ParsedReplica | null {
-  const src = text.replace(/\r\n/g, '\n');
+  const src = text.replace(/\r\n/g, '\n').trim();
   const head = /Add the "([^"]+)" component to my project\.(?:[ \t]*It comes from (?:the )?(.+?)(?::[ \t]*(\S+?))?\.?[ \t]*)?$/m.exec(src);
+  const zhHead = /^把「(.+?)」组件加到我的项目里。/m.exec(src);
   const section = (label: string) => {
-    const m = new RegExp(`^${label}[^\\n]*:\\s*\\n\`\`\`[a-z]*\\n([\\s\\S]*?)\\n\`\`\``, 'm').exec(src);
+    const m = new RegExp(`^(?:${label})[^\\n]*:\\s*\\n\`\`\`[a-z]*\\n([\\s\\S]*?)\\n\`\`\``, 'm').exec(src);
     return m ? m[1] : '';
   };
-  const markup = section('Markup');
-  if (!head && !markup) return null;
+  const markup = section('Markup|结构|markup\\.html');
+  if (!markup.trim()) {
+    const html = /^</.test(src) ? src : /^```html[ \t]*\n([\s\S]*?)\n```[ \t]*$/m.exec(src)?.[1];
+    if (!html || !/<[a-z][\s\S]*>/i.test(html) || /<template\b|<script\s+setup\b/i.test(html)) return null;
+    const parts = splitHtml(html);
+    if (!parts.markup.trim()) return null;
+    return {
+      title: /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim() ?? '',
+      sourceName: '', sourceUrl: '', summary: '', ...parts,
+    };
+  }
 
   let summary = '';
   if (head) {
@@ -162,12 +172,12 @@ export function parseReplicaPrompt(text: string): ParsedReplica | null {
     summary = (stop >= 0 ? after.slice(0, stop) : '').trim();
   }
   return {
-    title: head?.[1] ?? '',
+    title: head?.[1] ?? zhHead?.[1] ?? '',
     sourceName: head?.[2]?.trim() ?? '',
     sourceUrl: head?.[3]?.trim() ?? '',
     summary,
     markup,
-    style: section('Styles'),
-    script: section('Script'),
+    style: section('Styles|样式|style\\.css'),
+    script: section('Script|脚本|script\\.js'),
   };
 }
