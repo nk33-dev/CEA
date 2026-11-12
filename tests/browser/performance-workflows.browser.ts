@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { AssetDetail } from '../../shared/types.ts';
 import { htmlPlayPage } from '../../server/play.ts';
+import { mockLibrary } from './fixtures/mockLibrary.ts';
 
 const asset: AssetDetail = {
   id: 'performance-fixture', title: 'Performance Fixture', type: 'component', categoryId: null,
@@ -177,11 +178,12 @@ test('organize retains selections outside the search and shows partial selection
 });
 
 test('route loading gives feedback and tooltip stays within the phone viewport', async ({ page }) => {
+  await mockLibrary(page);
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/api/assets/weather-day-switcher', async route => { await gate; await route.continue(); });
+  await page.route('**/api/assets/demo-a', async route => { await gate; await route.fallback(); });
   await page.goto('/');
-  await page.locator('.card-meta[href="/a/weather-day-switcher"]').click();
+  await page.locator('.card-meta[href="/a/demo-a"]').click();
   await expect(page.getByRole('status', { name: '正在打开页面', exact: true })).toBeVisible();
   release();
   await expect(page.locator('.studio-detail .stage-host')).toHaveAttribute('aria-busy', 'false');
@@ -197,4 +199,28 @@ test('route loading gives feedback and tooltip stays within the phone viewport',
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(383);
   await page.keyboard.press('Escape');
   await expect(tooltip).toHaveCount(0);
+});
+
+test('a timed-out framework keeps the previous preview and offers a visible retry', async ({ page }) => {
+  await mockLibrary(page);
+  let recover = false;
+  await page.route('**/play/demo-a/vue/**', route => recover ? route.fallback() : route.fulfill({
+    contentType: 'text/html',
+    body: '<script>parent.postMessage({type:"cea:boot"},"*")</script>',
+  }));
+  await page.goto('/a/demo-a');
+  await expect(page.locator('.preview-stages')).toHaveAttribute('aria-busy', 'false');
+  const original = page.locator('iframe[src*="/html/"]');
+  await page.getByRole('combobox', { name: '实现框架', exact: true }).click();
+  await page.getByRole('option', { name: 'Vue', exact: true }).click();
+  await expect(page.locator('.preview-stages')).toHaveAttribute('aria-busy', 'true');
+  await expect(original).toBeVisible();
+  const retry = page.locator('.device-preview > .preview-failure').getByRole('button', { name: '重试预览', exact: true });
+  await expect(retry).toBeVisible({ timeout: 15000 });
+  recover = true;
+  await retry.click();
+  await expect(page.locator('.preview-stages')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('.preview-failure')).toHaveCount(0);
+  await expect(page.locator('iframe[src*="/vue/"]')).toBeVisible();
+  await expect(original).toHaveCount(1);
 });

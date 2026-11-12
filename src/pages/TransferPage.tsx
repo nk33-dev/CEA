@@ -211,8 +211,9 @@ export function TransferPage() {
               {(mode === 'merge' || p.source === 'folder') && p.duplicates.length > 0 && (
                 <div className="dup">
                   <p className="dup-title">{p.duplicates.length}{uiText(" 个已在库里，怎么处理？")}</p>
-                  <ChoiceControl label={uiText("重复的组件")} value={duplicates} onChange={setDuplicates} options={STRATEGIES} disabled={importing} />
-                  <p className="reuse-hint">{STRATEGIES.find(s => s.value === duplicates)?.hint}</p>
+                  <ChoiceControl label={uiText("重复的组件")} value={duplicates} onChange={setDuplicates}
+                    options={STRATEGIES.map(option => ({ ...option, label: uiText(option.label), hint: uiText(option.hint) }))} disabled={importing} />
+                  <p className="reuse-hint">{uiText(STRATEGIES.find(s => s.value === duplicates)!.hint)}</p>
                 </div>
               )}
 
@@ -239,10 +240,10 @@ export function TransferPage() {
         <div className="settings-content transfer-export">
           <ChoiceControl label={uiText("导出格式")} value={format} onChange={next => { setFormat(next); setExportedTo(''); setExportError(''); }} list disabled={exporting}
             options={FORMATS.map(option => ({
-              value: option.value, ariaLabel: option.label,
+              value: option.value, ariaLabel: uiText(option.label),
               label: <>
                 <span className="transfer-format-icon" aria-hidden="true">{option.value === 'backup' ? <FileArchive size={20} /> : <FolderOpen size={20} />}</span>
-                <span className="transfer-format-text"><strong>{option.label}</strong><small>{option.hint}</small></span>
+                <span className="transfer-format-text"><strong>{uiText(option.label)}</strong><small>{uiText(option.hint)}</small></span>
                 <span className="transfer-format-check" aria-hidden="true"><Check size={13} strokeWidth={2.5} /></span>
               </>,
             }))} />

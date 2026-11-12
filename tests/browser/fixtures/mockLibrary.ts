@@ -122,6 +122,7 @@ export async function mockLibrary(page: Page) {
         const asset = assets.get(id)!;
         if (body.action === 'delete') assets.delete(id);
         else if (body.action === 'tag') asset.tags = [...new Set([...asset.tags, body.value])];
+        else if (body.action === 'untag') asset.tags = asset.tags.filter(tag => tag.toLowerCase() !== body.value.toLowerCase());
         else asset.categoryId = body.value || null;
       }
       return json({ changed: body.ids.length });

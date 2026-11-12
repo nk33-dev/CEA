@@ -1,8 +1,10 @@
 import { uiText, useUi } from '../lib/uiI18n.ts';
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { playPath } from '../../shared/paths.ts';
 import { CARD_VIEWPORT, fitPreview, previewKind, previewScale, thumbnailTransform, type PreviewBounds, type PreviewDevice, type PreviewFraming, type PreviewLayout, type PreviewViewport } from '../../shared/preview.ts';
 import { usePreviewActivity } from './PreviewActivity.tsx';
+import RotateCcw from 'lucide-react/icons/rotate-ccw';
 
 export type StageTheme = 'light' | 'dark';
 
@@ -28,7 +30,9 @@ interface StageProps {
   onResume?: () => void;
   zoom?: number;
   onReady?: () => void;
+  onError?: () => void;
   loadingIndicator?: boolean;
+  errorIndicator?: boolean;
   viewport?: PreviewViewport | null;
   device?: PreviewDevice;
   framing?: PreviewFraming;
@@ -42,7 +46,7 @@ interface StageProps {
  * 所有素材都通过统一的 /play/<id>/<framework>/ 地址播放，HTML、React、Vue 一样。
  * iframe 在沙箱里运行，主题通过 postMessage 切换，不用重新加载。
  */
-export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onReady, onBounds, visibleArea, loadingIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
+export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onReady, onError, onBounds, visibleArea, loadingIndicator = true, errorIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
   useUi();
   const [initialTheme] = useState(theme);
   const [initialComponentTheme] = useState(componentTheme);
@@ -53,36 +57,42 @@ export const Stage = memo(function Stage({ assetId, framework, src, title, theme
   // 草稿地址也带上初始状态，编辑页的卡片样张和列表缩略图一样先播完入场再暂停
   const query = `theme=${initialTheme}&componentTheme=${initialComponentTheme}&active=${initialActive ? '1' : '0'}&interactive=${initialInteractive ? '1' : '0'}&device=${initialDevice}&framing=${initialFraming}${thumbnail ? '&thumbnail=1' : ''}`;
   const url = src ? `${src}${src.includes('?') ? '&' : '?'}${query}` : `${playPath(assetId!, framework)}?${query}${version ? `&v=${encodeURIComponent(version)}` : ''}`;
-  const request = JSON.stringify([url, reloadKey]);
+  const [retry, setRetry] = useState(0);
+  const [failed, setFailed] = useState<string | null>(null);
+  const request = JSON.stringify([url, reloadKey, retry]);
   const [displayed, setDisplayed] = useState<{ request: string; url: string } | null>(null);
   const pending = displayed?.request !== request;
   return (
-    <div className="stage-host" aria-busy={pending} data-theme={theme}>
+    <div className="stage-host" aria-busy={pending && failed !== request} data-theme={theme}>
       {displayed && <StageFrame key={displayed.request} src={displayed.url} title={title} className={className}
         theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={pending ? false : active} inert={pending || inert} standby={pending} onResume={pending ? undefined : onResume} onBounds={pending ? undefined : onBounds} />}
       {pending && <StageFrame key={request} src={url} title={title} className={className}
         theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={active} inert={inert} onResume={onResume}
-        onReady={() => { setDisplayed({ request, url }); onReady?.(); }} onBounds={onBounds} />}
-      {loadingIndicator && <PreviewLoading busy={pending} />}
+        onReady={() => { setFailed(null); setDisplayed({ request, url }); onReady?.(); }}
+        onError={() => { setFailed(request); onError?.(); }} onBounds={onBounds} />}
+      {loadingIndicator && <PreviewLoading busy={pending && failed !== request} />}
+      {errorIndicator && pending && failed === request && <PreviewFailure onRetry={() => setRetry(value => value + 1)} />}
     </div>
   );
 });
 
-function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, className, onReady, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
+function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, className, onReady, onError, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
   useUi();
   const ref = useRef<HTMLIFrameElement>(null);
   const hasRuntime = useRef(false);
   const readyReported = useRef(false);
   const fallback = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
-  const callbacks = useRef({ onReady, onResume, onBounds });
-  callbacks.current = { onReady, onResume, onBounds };
+  const callbacks = useRef({ onReady, onResume, onBounds, onError });
+  callbacks.current = { onReady, onResume, onBounds, onError };
   useEffect(() => {
+    const deadline = setTimeout(() => { if (!readyReported.current) callbacks.current.onError?.(); }, 12000);
     const receive = (event: MessageEvent) => {
       if (event.source !== ref.current?.contentWindow) return;
       if (event.data?.type === 'cea:boot') hasRuntime.current = true;
       if (event.data?.type === 'cea:ready') {
         hasRuntime.current = true;
+        clearTimeout(deadline);
         clearTimeout(fallback.current);
         if (readyReported.current) return;
         readyReported.current = true;
@@ -97,6 +107,7 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
     return () => {
       window.removeEventListener('message', receive);
       clearTimeout(fallback.current);
+      clearTimeout(deadline);
     };
   }, []);
   useEffect(() => {
@@ -152,6 +163,7 @@ export const PreviewStages = memo(function PreviewStages({ framework, reloadKey 
   const [visited, setVisited] = useState<string[]>([framework]);
   const [generations, setGenerations] = useState<Record<string, number>>({});
   const [ready, setReady] = useState<Record<string, boolean>>({});
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [lastShown, setLastShown] = useState(framework);
   const bounds = useRef<Record<string, { value: PreviewBounds | null; layout?: PreviewLayout }>>({});
   useEffect(() => {
@@ -171,18 +183,23 @@ export const PreviewStages = memo(function PreviewStages({ framework, reloadKey 
     setVisited(list => list.includes(framework) ? list : [...list, framework]);
   }, [framework]);
   return (
-    <div className="preview-stages" aria-busy={!ready[framework]}>
+    <div className="preview-stages" aria-busy={!ready[framework] && !failed[framework]}>
       {[...new Set([...visited, framework])].map(f => (
         <div key={f} className="preview-layer" hidden={f !== framework && f !== displayed} data-pending={f !== displayed || undefined}
           aria-hidden={f !== displayed || undefined} inert={f !== displayed}>
           <ZoomStage zoom={zoom} viewport={viewport}>
-            <Stage {...props} loadingIndicator={false} framework={f} active={active && f === framework} onResume={f === framework ? onResume : undefined} reloadKey={generations[f] ?? 0}
+            <Stage {...props} loadingIndicator={false} errorIndicator={false} framework={f} active={active && f === framework} onResume={f === framework ? onResume : undefined} reloadKey={generations[f] ?? 0}
               onBounds={(value, layout) => { bounds.current[f] = { value, layout }; if (f === framework) onBounds?.(value, layout); }}
-              onReady={() => setReady(prev => prev[f] ? prev : { ...prev, [f]: true })} />
+              onError={() => setFailed(prev => ({ ...prev, [f]: true }))}
+              onReady={() => { setFailed(prev => prev[f] ? { ...prev, [f]: false } : prev); setReady(prev => prev[f] ? prev : { ...prev, [f]: true }); }} />
           </ZoomStage>
         </div>
       ))}
-      <PreviewLoading busy={!ready[framework]} />
+      <PreviewLoading busy={!ready[framework] && !failed[framework]} />
+      {failed[framework] && <PreviewFailure onRetry={() => {
+        setFailed(prev => ({ ...prev, [framework]: false }));
+        setGenerations(prev => ({ ...prev, [framework]: (prev[framework] ?? 0) + 1 }));
+      }} />}
     </div>
   );
 });
@@ -195,7 +212,19 @@ export function PreviewLoading({ busy = true }: { busy?: boolean }) {
   </span>;
 }
 
-/** 卡片进入视口才挂载预览，离开后卸载，滚动长列表时不会同时跑几十个页面 */
+function PreviewFailure({ onRetry }: { onRetry: () => void }) {
+  useUi();
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  // 设备画布可能只显示组件的一小块；错误操作留在未缩放的外层，避免落到取景范围之外。
+  useLayoutEffect(() => { setContainer(anchor.current?.closest<HTMLElement>('.device-preview') ?? null); }, []);
+  const panel = <div className="preview-failure" role="alert"><span>{uiText('预览加载超时')}</span>
+    <button type="button" className="btn btn-sm" onClick={onRetry}><RotateCcw size={14} />{uiText('重试预览')}</button>
+  </div>;
+  return <><span ref={anchor} hidden />{container ? createPortal(panel, container) : panel}</>;
+}
+
+/** 只跟踪可见性，预览保留和暂停由调用方决定。 */
 export function useInView<T extends Element>(rootMargin = '200px', threshold = 0) {
   const ref = useRef<T>(null);
   const [inView, setInView] = useState(false);
@@ -223,9 +252,11 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
   const receiveBounds = (next: PreviewBounds | null) => setBounds(previous =>
     previous?.x === next?.x && previous?.y === next?.y && previous?.width === next?.width && previous?.height === next?.height ? previous : next);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (inView && !ready) return activity?.begin();
-  }, [activity, inView, ready]);
+    if (inView && !ready && !failed) return activity?.begin();
+  }, [activity, inView, ready, failed]);
   const kind = previewKind(viewport);
   const view = viewport ?? CARD_VIEWPORT;
   useEffect(() => {
@@ -245,10 +276,12 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
       {t && (
         <div className="fit-stage-inner" data-measured={bounds ? '' : undefined} aria-hidden={!ready || undefined} inert={!ready}
           style={{ opacity: ready ? 1 : 0, width: view.width, height: view.height, transform: `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) scale(${t.scale})` }}>
-          <Stage {...props} thumbnail visibleArea={visibleArea} loadingIndicator={false} onBounds={receiveBounds} onReady={() => { setReady(true); props.onReady?.(); }} />
+          <Stage key={attempt} {...props} thumbnail visibleArea={visibleArea} loadingIndicator={false} errorIndicator={false} onBounds={receiveBounds}
+            onError={() => { setFailed(true); props.onError?.(); }} onReady={() => { setFailed(false); setReady(true); props.onReady?.(); }} />
         </div>
       )}
-      {!activity && <PreviewLoading busy={!ready} />}
+      {!activity && <PreviewLoading busy={!ready && !failed} />}
+      {failed && <PreviewFailure onRetry={() => { setFailed(false); setAttempt(value => value + 1); }} />}
     </div>
   );
 }

@@ -58,7 +58,14 @@ export function OrganizePage() {
       : b.count - a.count || a.name.localeCompare(b.name)), [indexed, deferredQuery, status, order, locale, categories]);
   const virtual = useVirtualizer({ count: Math.ceil(rows.length / columns), getScrollElement: () => scroll.current, estimateSize: () => 64, overscan: 3 });
   useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [query, tab, status, order]);
-  useEffect(() => { setSelected(new Set()); setQuery(''); }, [tab]);
+  useEffect(() => { setSelected(new Set()); setQuery(''); setOrder('usage'); }, [tab]);
+  useEffect(() => {
+    const ids = new Set(indexed.map(({ row }) => row.id));
+    setSelected(previous => {
+      const next = new Set([...previous].filter(id => ids.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [indexed]);
   const toggle = (id: string) => setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const open = (next: typeof action, initial = '') => { setValue(initial); setError(''); setAction(next); };
   const apply = async () => {
@@ -160,7 +167,7 @@ export function OrganizePage() {
         </div> : <div className="empty"><p>{query ? uiText("没有匹配项") : tab === 'tags' ? uiText("还没有标签") : uiText("还没有分类")}</p></div>}
       </div>
       <Dialog open={!!action} onClose={() => setAction(null)} locked={busy} wide={action === 'translate'} className={action === 'translate' ? 'dialog-translation' : undefined}
-        title={action === 'translate' ? uiText("编辑译名") : action === 'delete' ? uiText("删除 {{value0}} 个{{value1}}？", {value0: selected.size,value1: tab === 'tags' ? '标签' : '分类'}) : action === 'merge' ? uiText("合并 {{value0}} 个标签", {value0: selected.size}) : action === 'create' ? uiText("新建分类") : uiText("重命名")}
+        title={action === 'translate' ? uiText("编辑译名") : action === 'delete' ? (tab === 'tags' ? uiText("删除 {{value0}} 个标签？", {value0: selected.size}) : uiText("删除 {{value0}} 个分类？", {value0: selected.size})) : action === 'merge' ? uiText("合并 {{value0}} 个标签", {value0: selected.size}) : action === 'create' ? uiText("新建分类") : uiText("重命名")}
         footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>{uiText("取消")}</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || (action !== 'delete' && action !== 'translate' && !value.trim())} onClick={apply}>{busy ? uiText("处理中…") : action === 'delete' ? uiText("删除") : uiText("保存")}</button></>}>
         {action === 'delete' ? <p>{tab === 'tags' ? uiText("这些标签会从关联组件上移除，组件保留。") : uiText("关联组件会变为未分类，组件保留。")}</p>
           : action === 'translate' ? <div className="organize-translation-editor">

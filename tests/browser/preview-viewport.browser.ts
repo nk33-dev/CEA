@@ -95,9 +95,10 @@ test('thumbnail document scrollbars are hidden without changing inner scrolling 
 });
 
 test('the actual map thumbnail has no document scrollbar and still responds to pointer input', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?q=china-map-hero');
   const card = page.locator('[data-asset-id="china-map-hero"]');
   await card.scrollIntoViewIfNeeded();
+  await card.locator('.card-stage').hover();
   await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
   const frame = card.frameLocator('iframe');
   await expect(frame.locator('html')).toHaveCSS('scrollbar-width', 'none');

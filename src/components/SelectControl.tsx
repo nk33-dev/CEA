@@ -64,7 +64,7 @@ export function SelectControl({ value, onValueChange, options, label, placeholde
             {options.map((option, i) => [
               option.separated && <Select.Separator key={`${option.value}-sep`} className="cea-select-separator" />,
               <Select.Item className="option-row cea-select-item" key={option.value} value={String(i)} disabled={option.disabled} textValue={option.label}>
-                <Select.ItemText>{uiText(option.label)}</Select.ItemText>
+                <Select.ItemText>{option.label}</Select.ItemText>
                 {option.note && <span className="cea-select-note">{option.note}</span>}
                 <Select.ItemIndicator className="cea-select-check"><Check size={14} aria-hidden="true" /></Select.ItemIndicator>
               </Select.Item>,

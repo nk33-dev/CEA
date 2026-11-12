@@ -72,10 +72,15 @@ const routes: RouteObject[] = [
       { path: '/settings', lazy: async () => ({ Component: (await import('./pages/SettingsPage.tsx')).SettingsPage }) },
       { path: '/organize', lazy: async () => ({ Component: (await import('./pages/OrganizePage.tsx')).OrganizePage }) },
       { path: '/guide', lazy: async () => ({ Component: (await import('./pages/GuidePage.tsx')).GuidePage }) },
-      { path: '*', element: <div className="page-narrow"><div className="empty"><p className="empty-title">{uiText("页面不存在")}</p><a className="btn" href="/">{uiText("回到素材库")}</a></div></div> },
+      { path: '*', Component: NotFound },
     ],
   },
 ];
+
+function NotFound() {
+  useUi();
+  return <div className="page-narrow"><div className="empty"><p className="empty-title">{uiText("页面不存在")}</p><a className="btn" href="/">{uiText("回到素材库")}</a></div></div>;
+}
 
 function Application() {
   useUi();

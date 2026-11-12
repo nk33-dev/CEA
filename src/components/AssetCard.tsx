@@ -47,11 +47,13 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const [paused, setPaused] = useState(false);
   const [replay, setReplay] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
   const favoriteBusy = useRef(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(leaveTimer.current), []);
   const wantsLive = !selecting && !paused && (live || hovered || focused);
-  const retained = useRetainedPreview(asset.id, inView && (!asset.cover || wantsLive));
+  useEffect(() => setCoverFailed(false), [asset.cover, asset.updatedAt]);
+  const retained = useRetainedPreview(asset.id, inView && (!asset.cover || coverFailed || wantsLive));
   const mounted = retained && asset.frameworks.length > 0;
   const active = mounted && inView && wantsLive;
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
@@ -83,7 +85,7 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
         onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setHovered(true); setPaused(false); } }}
         onPointerLeave={() => { leaveTimer.current = setTimeout(() => setHovered(false), 180); }}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
-        {asset.cover && <img className="card-cover" src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" />}
+        {asset.cover && !coverFailed && <img className="card-cover" src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
         {mounted && <FitStage assetId={asset.id} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
           active={active} onResume={resume} reloadKey={replay} />}
         {selecting ? (

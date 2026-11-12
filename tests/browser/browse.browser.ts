@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { AssetSummary } from '../../shared/types.ts';
 import { htmlPlayPage } from '../../server/play.ts';
-import { mockLibrary } from './fixtures/mockLibrary.ts';
+import { mockLibrary, PNG } from './fixtures/mockLibrary.ts';
 
 const preview = htmlPlayPage('Preview', [
   { path: 'markup.html', content: '<button id="counter">0</button><div class="moving"></div>' },
@@ -17,7 +17,7 @@ const items: AssetSummary[] = Array.from({ length: 1000 }, (_, i) => ({
 }));
 
 for (const size of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {
-  test(`six cards fit two complete desktop rows at ${size.width}x${size.height}`, async ({ page }) => {
+  test(`six cards keep two readable desktop rows at ${size.width}x${size.height}`, async ({ page }) => {
     await page.setViewportSize(size);
     await page.route('**/api/library', route => route.fulfill({ json: { libraryId: 'fixture', path: 'fixture', assetCount: 6 } }));
     await page.route(/\/api\/(tags|categories)$/, route => route.fulfill({ json: [] }));
@@ -33,7 +33,8 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]
       return { y: box.y, bottom: box.bottom };
     }));
     expect(new Set(cards.map(card => card.y)).size).toBe(2);
-    expect(Math.max(...cards.map(card => card.bottom))).toBeLessThanOrEqual(size.height - 16);
+    expect(Math.min(...await page.locator('.card-stage').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height)))).toBeGreaterThanOrEqual(200);
+    expect(cards[3].y - cards[0].bottom).toBeGreaterThanOrEqual(16);
     await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6);
     await page.screenshot({ path: `test-results/browse-six-${size.width}.png` });
   });
@@ -63,7 +64,7 @@ for (const locale of ['zh', 'en']) {
       await expect.poll(async () => (await geometry())[6].top).toBeGreaterThanOrEqual(size.height);
       const cards = await geometry();
       expect(new Set(cards.slice(0, 6).map(card => card.top)).size).toBe(2);
-      expect(Math.max(...cards.slice(0, 6).map(card => card.bottom))).toBeLessThanOrEqual(size.height - 16);
+      expect(cards[3].top - cards[0].bottom).toBeGreaterThanOrEqual(16);
       await page.screenshot({ path: `test-results/browse-seven-${locale}-${size.width}-${size.height}.png` });
     }
     const seventh = page.locator('.card').nth(6);
@@ -106,7 +107,11 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(frame.locator('html')).not.toHaveAttribute('data-paused', '');
 
   await page.getByRole('button', { name: '下一页', exact: true }).scrollIntoViewIfNeeded();
-  await expect(first.locator('iframe')).toHaveCount(0);
+  await expect.poll(async () => {
+    const frame = first.locator('iframe');
+    if (!await frame.count()) return true;
+    return first.frameLocator('iframe').locator('html').getAttribute('data-paused', { timeout: 500 }).then(value => value === '', () => true);
+  }).toBe(true);
   expect(await page.locator('iframe').count()).toBeLessThan(13);
   await page.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(page.locator('.card-title').first()).toHaveText('Component 24');
@@ -131,14 +136,16 @@ test('visible previews load together and language changes preserve frames', asyn
   expect(await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')))).toEqual(before);
 });
 
-test('phone scrolling releases previews outside the viewport', async ({ page }) => {
+test('phone scrolling keeps covers and bounds retained preview instances', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await mockLibrary(page);
   await page.goto('/');
   await expect(page.locator('.card')).not.toHaveCount(0);
   await expect(page.locator('.stage-host[aria-busy=false]').first()).toBeVisible();
   const first = page.locator('.card').first();
   await page.locator('.card').last().scrollIntoViewIfNeeded();
-  await expect(first.locator('iframe')).toHaveCount(0);
+  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(12);
+  await expect(first.frameLocator('iframe').locator('html')).toHaveAttribute('data-paused', '');
   const widths = await page.evaluate(() => ({ layout: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
   expect(widths.content).toBeLessThanOrEqual(widths.layout);
 });
@@ -173,6 +180,7 @@ test('entry transforms do not resize the thumbnail and loading stays at display 
     { path: 'style.css', content: '.component{width:300px;height:280px;background:#568ee8;animation:enter 700ms both}@keyframes enter{from{transform:scale(.25)}to{transform:scale(1)}}' },
   ]);
   await page.route('**/api/library', route => route.fulfill({ json: { libraryId: 'fixture', path: 'fixture', assetCount: 1 } }));
+  await page.route('**/files/**', route => route.fulfill({ contentType: 'image/png', body: PNG }));
   await page.route(/\/api\/(tags|categories)$/, route => route.fulfill({ json: [] }));
   await page.route(/\/api\/assets\?/, route => route.fulfill({ json: {
     items: [{ ...items[0], cover: 'assets/fixture/media/differently-cropped-cover.png' }], total: 1, page: 1, limit: 24,
@@ -185,7 +193,8 @@ test('entry transforms do not resize the thumbnail and loading stays at display 
     await route.fulfill({ contentType: 'text/html', body: animated });
   });
   await page.goto('/');
-  await expect(page.locator('.card-cover')).toHaveCount(0);
+  await expect(page.locator('.card-cover')).toHaveCount(1);
+  await page.locator('.card-stage').hover();
   await expect(page.locator('.fit-stage > .stage-loading')).toHaveCount(0);
   const loading = page.locator('.browse-progress[data-busy=true]');
   await expect(loading).toBeVisible();

@@ -35,3 +35,32 @@ test('organize exposes translations, missing names and component links without h
   await page.getByRole('link', { name: '查看 动效 的组件', exact: true }).click();
   await expect(page).toHaveURL(/tags=/);
 });
+
+test('UI language updates not-found content and translated deletion titles', async ({ page }) => {
+  await mockLibrary(page);
+  await page.goto('/missing');
+  await page.getByRole('combobox', { name: '界面语言', exact: true }).click();
+  await page.getByRole('option', { name: 'English', exact: true }).click();
+  await expect(page.getByText('Page not found', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Organize', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete 动效', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Delete 1 tags?', exact: true })).toBeVisible();
+});
+
+test('English CEA controls preserve user category names and fit a narrow header', async ({ page }) => {
+  const demo = await mockLibrary(page);
+  await page.route('**/api/categories', route => route.fulfill({ json: [{ id: 'named-settings', name: '设置', count: 3 }] }));
+  await page.addInitScript(() => { if (window === window.top) localStorage.setItem('cea:ui:locale', 'en'); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?select=1');
+  const brand = await page.locator('.brand').boundingBox();
+  const preferences = await page.locator('.app-preferences').boundingBox();
+  expect(Math.abs(brand!.y + brand!.height / 2 - preferences!.y - preferences!.height / 2)).toBeLessThan(1);
+  await page.getByRole('button', { name: 'Select page', exact: true }).click();
+  await page.getByRole('button', { name: 'Move to category', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Move to category', exact: true }).click();
+  await expect(page.getByRole('option', { name: '设置', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(demo.writes).toEqual([]);
+});

@@ -197,7 +197,7 @@ test('batch export, tags, category assignment and deletion use only fake records
     await page.getByRole('button', { name: '选择本页', exact: true }).click();
     await page.getByRole('button', { name: action, exact: true }).click();
     const dialog = page.getByRole('dialog');
-    if (action === '添加标签') await dialog.getByRole('textbox', { name: '标签名称', exact: true }).fill('批量标签');
+    if (action === '添加标签') await dialog.getByRole('combobox', { name: '标签名称', exact: true }).fill('批量标签');
     if (action === '移动分类') {
       await dialog.getByRole('combobox', { name: '移动到分类', exact: true }).click();
       await page.getByRole('option', { name: '区块', exact: true }).click();
@@ -220,8 +220,8 @@ test('organize rename, translation, merge, category creation, ordering and remov
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
   await page.getByRole('button', { name: '编辑译名 交互', exact: true }).click();
-  await page.getByRole('tab', { name: /English/ }).click();
-  await page.getByRole('textbox', { name: 'English译名', exact: true }).fill('Interaction');
+  await page.getByRole('textbox', { name: '英文译名', exact: true }).fill('Interaction');
+  await page.getByText('更多语言', { exact: true }).click();
   await page.getByRole('button', { name: '添加语言', exact: true }).click();
   await page.getByRole('textbox', { name: '搜索可添加语言', exact: true }).fill('French');
   await page.locator('.language-picker-option').filter({ hasText: 'Français' }).click();
