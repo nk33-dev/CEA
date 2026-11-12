@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, type AppState } from '../server/app.ts';
 import { readConfig, rememberLibrary, resolveLibraryPath } from '../server/config.ts';
 import { Library } from '../server/library.ts';
+import { listenForFetch } from './helpers/http.ts';
 
 let root: string;
 let server: Server | undefined;
@@ -32,11 +32,7 @@ afterEach(async () => {
 });
 
 async function start() {
-  server = createApp(state).listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No test server address');
-  base = `http://127.0.0.1:${address.port}`;
+  ({ server, base } = await listenForFetch(createApp(state)));
 }
 
 function select(target: string) {

@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { once } from 'node:events';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../server/app.ts';
 import { Library } from '../server/library.ts';
 import { seedTestLibrary } from './helpers/library.ts';
+import { listenForFetch } from './helpers/http.ts';
 
 let dir: string;
 let lib: Library;
@@ -17,11 +17,7 @@ beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cea-http-test-'));
   lib = Library.open(dir);
   seedTestLibrary(lib);
-  server = createApp({ lib }).listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('HTTP test server did not start');
-  base = `http://127.0.0.1:${address.port}`;
+  ({ server, base } = await listenForFetch(createApp({ lib })));
 });
 
 afterEach(async () => {
@@ -42,6 +38,27 @@ function request(route: string, method = 'GET', body?: unknown, trusted = true) 
 }
 
 describe('按需读取预览', () => {
+  it('已保存素材和草稿可读取自己目录内的模块与 SVG，其他资源不可访问', async () => {
+    const detail = lib.getAsset('weather-day-switcher');
+    const variant = detail.variants.find(variant => variant.framework === 'html')!;
+    variant.files.push(
+      { path: 'helpers/math.mjs', content: 'export const answer = 42;' },
+      { path: 'icons/shape.svg', content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle r="4"/></svg>' },
+    );
+    lib.updateAsset(detail.id, { ...detail, variants: detail.variants });
+    const module = await request('/play/weather-day-switcher/html/helpers/math.mjs');
+    expect(module.status).toBe(200);
+    expect(module.headers.get('access-control-allow-origin')).toBe('*');
+    expect(await module.text()).toContain('answer = 42');
+    const svg = await request('/play/weather-day-switcher/html/icons/shape.svg');
+    expect(svg.headers.get('content-type')).toContain('image/svg+xml');
+    expect((await request('/play/weather-day-switcher/html/missing.js')).status).toBe(404);
+    expect((await request('/play/weather-day-switcher/html/library.db')).status).toBe(404);
+    const draft = await (await request('/api/play/draft', 'POST', { title: 'Local modules', ...variant })).json();
+    expect(draft.url).toMatch(/\/$/);
+    expect((await request(`${draft.url}helpers/math.mjs`)).status).toBe(200);
+  });
+
   it('程序不再提供写入内置素材的接口', async () => {
     const count = lib.repo.countAssets();
     expect((await request('/api/library/examples', 'POST')).status).toBe(404);

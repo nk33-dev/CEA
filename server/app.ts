@@ -381,7 +381,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
     let theme: Variant['theme'];
     try { theme = parseThemeContract(req.body?.theme); } catch (e) { throw badRequest((e as Error).message); }
     drafts.set(token, { title: String(req.body?.title ?? '草稿'), variant: { framework: info.id, entry, dependencies: {}, files, ...(theme ? { theme } : {}) }, at: Date.now() });
-    res.json({ url: `/play/~draft/${token}` });
+    res.json({ url: `/play/~draft/${token}/` });
   }));
   app.get('/play/~draft/:token', asyncRoute(async (req, res) => {
     const draft = drafts.get(param(req, 'token'));
@@ -391,9 +391,28 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
     }
     await sendPlay(res, 'draft:' + param(req, 'token'), draft.title, draft.variant);
   }));
+  const sendResource = (res: Response, variant: Variant, resource: string) => {
+    const clean = normalizeRelPath(resource);
+    const file = clean && variant.files.find(file => file.path === clean);
+    if (!file) throw notFound('预览资源不存在');
+    res.setHeader('Content-Type', withCharset(mimeOf(clean!)));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.send(file.content);
+  };
+  app.get('/play/~draft/:token/*resource', asyncRoute((req, res) => {
+    const draft = drafts.get(param(req, 'token'));
+    if (!draft) throw notFound('草稿预览已过期');
+    sendResource(res, draft.variant, param(req, 'resource'));
+  }));
   // 草稿地址先注册，免得 ~draft 被当成素材 ID
   app.get('/play/:id/', playSaved);
   app.get('/play/:id/:framework/', playSaved);
+  app.get('/play/:id/:framework/*resource', asyncRoute((req, res) => {
+    const { variant } = state.lib.getPlayback(param(req, 'id'), param(req, 'framework'));
+    sendResource(res, variant, param(req, 'resource'));
+  }));
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: '接口不存在' });
