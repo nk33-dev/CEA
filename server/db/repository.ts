@@ -141,7 +141,8 @@ export class Repository {
       const args: (string | number)[] = [];
       for (const term of (query.q ?? '').slice(0, 200).trim().toLowerCase().split(/\s+/).filter(Boolean)) {
         clauses.push(`(
-          instr(lower(a.title),?)>0
+          instr(lower(a.title),?)>0 or instr(lower(a.id),?)>0 or instr(lower(a.source_name),?)>0
+          or exists(select 1 from variants v where v.asset_id=a.id and instr(lower(v.framework),?)>0)
           or exists(select 1 from asset_texts x where x.asset_id=a.id and (instr(lower(x.title),?)>0 or instr(lower(x.summary),?)>0 or instr(lower(x.idea),?)>0
             or exists(select 1 from json_each(x.theme_ideas) where instr(lower(value),?)>0)))
           or exists(select 1 from asset_tags ax join tags tx on tx.id=ax.tag_id where ax.asset_id=a.id and (
@@ -151,7 +152,7 @@ export class Repository {
             instr(lower(c.name),?)>0 or exists(select 1 from json_each(c.labels) where instr(lower(value),?)>0)
           ))
         )`);
-        args.push(term, term, term, term, term, term, term, term, term);
+        args.push(...Array(12).fill(term));
       }
       for (const tag of [...new Set(query.tags ?? [])]) {
         clauses.push('exists(select 1 from asset_tags ax join tags tx on tx.id=ax.tag_id where ax.asset_id=a.id and tx.name=? collate nocase)');
@@ -162,7 +163,10 @@ export class Repository {
     const where = (skip?: 'category' | 'framework' | 'favorite') => {
       const clauses: string[] = [];
       const args: string[] = [];
-      if (query.category && skip !== 'category') { clauses.push('a.category_id=?'); args.push(query.category); }
+      if (query.category && skip !== 'category') {
+        if (query.category === '__uncategorized__') clauses.push('a.category_id is null');
+        else { clauses.push('a.category_id=?'); args.push(query.category); }
+      }
       if (query.framework && skip !== 'framework') { clauses.push('exists(select 1 from variants v where v.asset_id=a.id and v.framework=?)'); args.push(query.framework); }
       if (query.favorite && skip !== 'favorite') clauses.push('a.favorite=1');
       return { sql: clauses.length ? ' where ' + clauses.join(' and ') : '', args };

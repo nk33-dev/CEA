@@ -105,6 +105,20 @@ describe('批量整理', () => {
     expect(lib.repo.countAssets()).toBe(6);
     expect(fs.readdirSync(dir).some(p => p.startsWith('.trash-'))).toBe(false);
   });
+
+  it('可从指定组件移除标签，并按未分类、框架、来源或 ID 找组件', () => {
+    populate(8);
+    lib.repo.setTagLabels('Shared', { zh: '共享', en: 'Shared' });
+    lib.manageAssets(['card-0000'], 'untag', 'SHARED');
+    expect(lib.repo.getTags('card-0000')).not.toContain('Shared');
+    expect(lib.repo.getTags('card-0001')).toContain('Shared');
+    expect(lib.repo.getTagLabels('Shared')).toEqual({ zh: '共享', en: 'Shared' });
+    expect(lib.repo.searchAssets({ category: '__uncategorized__' }).total).toBe(4);
+    expect(lib.repo.searchAssets({ q: 'vue' }).total).toBe(4);
+    expect(lib.repo.searchAssets({ q: 'card-0002' }).items.map(item => item.id)).toEqual(['card-0002']);
+    lib.repo.updateAsset({ ...lib.repo.getAsset('card-0002')!, sourceName: 'Reference collection' });
+    expect(lib.repo.searchAssets({ q: 'reference' }).total).toBe(1);
+  });
 });
 
 describe('说明与独立主题', () => {

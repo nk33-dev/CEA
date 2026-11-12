@@ -82,7 +82,7 @@ export const api = {
   createAsset: (input: AssetInput) => request<AssetDetail>('POST', '/api/assets', input),
   updateAsset: (id: string, input: AssetInput) => request<AssetDetail>('PUT', `/api/assets/${encodeURIComponent(id)}`, input),
   deleteAsset: (id: string) => request<void>('DELETE', `/api/assets/${encodeURIComponent(id)}`),
-  manageAssets: (ids: string[], action: 'delete' | 'tag' | 'category', value?: string) => request<{ changed: number }>('POST', '/api/assets/batch', { ids, action, value }),
+  manageAssets: (ids: string[], action: 'delete' | 'tag' | 'untag' | 'category', value?: string) => request<{ changed: number }>('POST', '/api/assets/batch', { ids, action, value }),
   setFavorite: (id: string, favorite: boolean) => request<{ favorite: boolean }>('PUT', `/api/assets/${encodeURIComponent(id)}/favorite`, { favorite }),
   draftPlay: (body: { title: string; framework: string; entry: string; files: CodeFile[]; theme?: import('../../shared/theme.ts').ThemeContract | null }, signal?: AbortSignal) => request<{ url: string }>('POST', '/api/play/draft', body, undefined, signal),
 

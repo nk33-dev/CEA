@@ -365,7 +365,7 @@ export class Library {
     return { changed: unique.length };
   }
 
-  manageAssets(ids: string[], action: 'delete' | 'tag' | 'category', value = '') {
+  manageAssets(ids: string[], action: 'delete' | 'tag' | 'untag' | 'category', value = '') {
     const unique = [...new Set(ids)];
     if (!unique.length || unique.length > 1000) throw badRequest('请选择 1 至 1000 个组件');
     if (unique.some(id => !this.repo.getAsset(id))) throw notFound('部分组件已不存在，请刷新后重试');
@@ -387,11 +387,12 @@ export class Library {
       try { fs.rmSync(trash, { recursive: true, force: true }); } catch (e) { console.error('组件已删除，临时目录清理失败：', trash, e); }
     } else {
       const tag = value.trim().replace(/^#/, '').replace(/\s+/g, ' ').slice(0, 30);
-      if (action === 'tag' && !tag) throw badRequest('标签名称不能为空');
+      if ((action === 'tag' || action === 'untag') && !tag) throw badRequest('标签名称不能为空');
       if (action === 'category' && value && !this.repo.getCategory(value)) throw notFound('分类不存在');
       this.repo.transaction(() => {
         for (const id of unique) {
           if (action === 'tag') this.repo.setTags(id, [...this.repo.getTags(id), tag]);
+          else if (action === 'untag') this.repo.setTags(id, this.repo.getTags(id).filter(name => name.toLowerCase() !== tag.toLowerCase()));
           else this.repo.updateAsset({ ...this.repo.getAsset(id)!, categoryId: value || null });
         }
       });

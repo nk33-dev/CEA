@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import ArrowDown from 'lucide-react/icons/arrow-down';
 import ArrowUp from 'lucide-react/icons/arrow-up';
@@ -19,12 +19,15 @@ import { handleTabKeys } from '../lib/tabKeys.ts';
 import { labelSearch, localizedName } from '../../shared/contentLocale.ts';
 import { TranslationEditor } from '../components/TranslationEditor.tsx';
 import { useContentLocale } from '../lib/prefs.ts';
+import { SelectControl } from '../components/SelectControl.tsx';
 
 export function OrganizePage() {
   const { categories, tags, refresh, notify } = useLibrary();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'categories' ? 'categories' : 'tags';
   const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
+  const [order, setOrder] = useState('usage');
   const deferredQuery = useDeferredValue(query);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState<'delete' | 'merge' | 'rename' | 'create' | 'translate' | null>(null);
@@ -44,9 +47,15 @@ export function OrganizePage() {
     const all = tab === 'tags' ? tags.map(t => ({ ...t, id: t.name })) : categories;
     return all.map(row => ({ row, search: labelSearch(row.name, row.labels) }));
   }, [tab, tags, categories]);
-  const rows = useMemo(() => indexed.filter(entry => entry.search.includes(deferredQuery.trim().toLowerCase())).map(entry => entry.row), [indexed, deferredQuery]);
-  const virtual = useVirtualizer({ count: Math.ceil(rows.length / columns), getScrollElement: () => scroll.current, estimateSize: () => 44, overscan: 2 });
-  useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [query, tab]);
+  const missing = indexed.filter(({ row }) => !row.labels?.zh?.trim() || !row.labels?.en?.trim()).length;
+  const rows = useMemo(() => indexed.filter(entry => entry.search.includes(deferredQuery.trim().toLowerCase()))
+    .map(entry => entry.row)
+    .filter(row => status !== 'missing' || !row.labels?.zh?.trim() || !row.labels?.en?.trim())
+    .sort((a, b) => order === 'name' ? localizedName(a.name, a.labels, locale).localeCompare(localizedName(b.name, b.labels, locale))
+      : order === 'manual' ? categories.findIndex(category => category.id === a.id) - categories.findIndex(category => category.id === b.id)
+      : b.count - a.count || a.name.localeCompare(b.name)), [indexed, deferredQuery, status, order, locale, categories]);
+  const virtual = useVirtualizer({ count: Math.ceil(rows.length / columns), getScrollElement: () => scroll.current, estimateSize: () => 64, overscan: 3 });
+  useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [query, tab, status, order]);
   useEffect(() => { setSelected(new Set()); setQuery(''); }, [tab]);
   const toggle = (id: string) => setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const open = (next: typeof action, initial = '') => { setValue(initial); setError(''); setAction(next); };
@@ -88,7 +97,7 @@ export function OrganizePage() {
   };
   return (
     <div className="workspace workspace-admin organize">
-      <header className="workspace-head"><div><h1>分类与标签</h1><p>{categories.length} 个分类 · {tags.length} 个标签</p></div>
+    <header className="workspace-head"><div><h1>分类与标签</h1><p>{categories.length} 个分类 · {tags.length} 个标签</p></div>
         <div className="settings-actions"><ContentLanguage /></div>
       </header>
       <div className="organize-toolbar">
@@ -101,6 +110,10 @@ export function OrganizePage() {
         <label className="search"><Search size={16} /><input aria-label={tab === 'tags' ? '搜索标签' : '搜索分类'} placeholder={tab === 'tags' ? '搜索标签' : '搜索分类'} value={query} onChange={e => setQuery(e.target.value)} />
           {query && <button type="button" className="search-clear" aria-label="清空整理搜索" onClick={() => setQuery('')}><X size={14} /></button>}
         </label>
+        <SelectControl label="译名状态" value={status} onValueChange={setStatus}
+          options={[{ value: 'all', label: '全部译名' }, { value: 'missing', label: `缺少中英译名 (${missing})` }]} />
+        <SelectControl label="整理排序" value={order} onValueChange={setOrder}
+          options={[{ value: 'usage', label: '使用最多' }, { value: 'name', label: '按名称' }, ...(tab === 'categories' ? [{ value: 'manual', label: '手动顺序' }] : [])]} />
         {tab === 'categories' && <button className="btn btn-sm" onClick={() => open('create')}><Plus size={15} />新建分类</button>}
         <span className="muted">{selected.size ? `已选 ${selected.size} 项` : `${rows.length} 项`}</span>
         {selected.size > 0 && <div className="organize-selection">
@@ -117,21 +130,28 @@ export function OrganizePage() {
           for (const row of rows) allSelected ? next.delete(row.id) : next.add(row.id);
           return next;
         })} /> : <span />}
-        <span>名称</span><span>组件数</span><span />
+        <span>名称与中英译名</span><span>组件数</span><span />
       </div>)}
       </div>
-      <div className="organize-list" style={rows.length <= 20 ? { height: Math.max(88, Math.ceil(rows.length / columns) * 44) } : undefined} ref={scroll} role="group" aria-label={tab === 'tags' ? '标签列表' : '分类列表'}>
+      <div className="organize-list" style={rows.length <= 20 ? { height: Math.max(88, Math.ceil(rows.length / columns) * 64) } : undefined} ref={scroll} role="group" aria-label={tab === 'tags' ? '标签列表' : '分类列表'}>
         {rows.length ? <div style={{ height: virtual.getTotalSize(), position: 'relative' }}>
           {virtual.getVirtualItems().map(item => <div className="organize-line" key={item.key} style={{ position: 'absolute', top: item.start, width: '100%', height: item.size, gridTemplateColumns: `repeat(${columns},minmax(0,1fr))` }}>
             {rows.slice(item.index * columns, (item.index + 1) * columns).map(row => <div key={row.id} className={`organize-row${selected.has(row.id) ? ' is-selected' : ''}${tab === 'categories' ? ' with-order' : ''}`}>
               <input type="checkbox" aria-label={`选择 ${row.name}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
-              <span className="organize-name" title={row.name}>{localizedName(row.name, row.labels, locale)}</span><span className="muted">{row.count}</span>
+              <span className="organize-name" title={row.name}>
+                <strong>{localizedName(row.name, row.labels, locale)}</strong>
+                <span className="organize-translations">
+                  {['zh', 'en'].map(code => <span key={code} data-missing={!row.labels?.[code]?.trim() || undefined}><small>{code.toUpperCase()}</small> {row.labels?.[code]?.trim() || '待补充'}</span>)}
+                </span>
+              </span>
+              <Link className="organize-count" aria-label={`查看 ${row.name} 的组件`} to={`/?${new URLSearchParams(tab === 'tags' ? { tags: JSON.stringify([row.name]) } : { category: row.id })}`}>{row.count}</Link>
               <div className="organize-row-actions">
                 {tab === 'categories' && <><button className="icon-btn" aria-label={`上移 ${row.name}`} title="上移" disabled={busy || categories[0]?.id === row.id} onClick={() => void move(row.id, -1)}><ArrowUp size={14} /></button><button className="icon-btn" aria-label={`下移 ${row.name}`} title="下移" disabled={busy || categories.at(-1)?.id === row.id} onClick={() => void move(row.id, 1)}><ArrowDown size={14} /></button></>}
                 <button type="button" className="icon-btn" aria-label={`编辑译名 ${row.name}`} title="编辑译名" onClick={() => {
                   setSelected(new Set([row.id])); setLabels(row.labels ?? {}); open('translate', row.name);
                 }}><Languages size={15} /></button>
                 <button className="icon-btn" aria-label={`重命名 ${row.name}`} title="重命名" onClick={() => { setSelected(new Set([row.id])); open('rename', row.name); }}><Pencil size={15} /></button>
+                <button className="icon-btn icon-btn-danger" aria-label={`删除 ${row.name}`} title="删除" onClick={() => { setSelected(new Set([row.id])); open('delete', row.name); }}><Trash2 size={15} /></button>
               </div>
             </div>)}
           </div>)}
@@ -141,7 +161,12 @@ export function OrganizePage() {
         title={action === 'translate' ? '编辑译名' : action === 'delete' ? `删除 ${selected.size} 个${tab === 'tags' ? '标签' : '分类'}？` : action === 'merge' ? `合并 ${selected.size} 个标签` : action === 'create' ? '新建分类' : '重命名'}
         footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>取消</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || (action !== 'delete' && action !== 'translate' && !value.trim())} onClick={apply}>{busy ? '处理中…' : action === 'delete' ? '删除' : '保存'}</button></>}>
         {action === 'delete' ? <p>{tab === 'tags' ? '这些标签会从关联组件上移除，组件保留。' : '关联组件会变为未分类，组件保留。'}</p>
-          : action === 'translate' ? <TranslationEditor name={value} value={labels} onChange={setLabels} initialLocale={locale} disabled={busy} />
+          : action === 'translate' ? <div className="organize-translation-editor">
+            <p className="muted">{value}</p>
+            <label className="field"><span>中文译名</span><input value={labels.zh ?? ''} disabled={busy} maxLength={120} onChange={e => setLabels(previous => ({ ...previous, zh: e.target.value }))} autoFocus /></label>
+            <label className="field"><span>英文译名</span><input value={labels.en ?? ''} disabled={busy} maxLength={120} onChange={e => setLabels(previous => ({ ...previous, en: e.target.value }))} /></label>
+            <details><summary>更多语言</summary><TranslationEditor name={value} value={labels} onChange={setLabels} initialLocale={locale} disabled={busy} /></details>
+          </div>
           : <label className="field"><span>{action === 'merge' ? '合并为' : '名称'}</span><input autoFocus value={value} maxLength={tab === 'tags' ? 30 : 40} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && value.trim() && !busy) void apply(); }} /></label>}
         {error && <p className="form-error" role="alert">{error}</p>}
       </Dialog>

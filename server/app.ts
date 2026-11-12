@@ -179,7 +179,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   }));
   app.post('/api/assets/batch', json, asyncRoute((req, res) => {
     if (!Array.isArray(req.body?.ids) || !req.body.ids.every((id: unknown) => typeof id === 'string')) throw badRequest('请选择组件');
-    if (!['delete', 'tag', 'category'].includes(req.body.action)) throw badRequest('不支持的批量操作');
+    if (!['delete', 'tag', 'untag', 'category'].includes(req.body.action)) throw badRequest('不支持的批量操作');
     res.json(state.lib.manageAssets(req.body.ids, req.body.action, String(req.body.value ?? '')));
   }));
 

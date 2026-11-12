@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import ArrowDownUp from 'lucide-react/icons/arrow-down-up';
 import ChevronLeft from 'lucide-react/icons/chevron-left';
@@ -11,6 +11,7 @@ import Search from 'lucide-react/icons/search';
 import Tags from 'lucide-react/icons/tags';
 import Trash2 from 'lucide-react/icons/trash-2';
 import X from 'lucide-react/icons/x';
+import TagMinus from 'lucide-react/icons/tag-x';
 import { FRAMEWORKS, frameworkLabel } from '../../shared/frameworks.ts';
 import type { AssetPage } from '../../shared/types.ts';
 import { readTagQuery, writeTagQuery } from '../../shared/search.ts';
@@ -61,17 +62,18 @@ export function HomePage() {
   const [selecting, setSelecting] = useState(params.get('select') === '1');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [action, setAction] = useState<'delete' | 'tag' | 'category' | null>(null);
+  const [action, setAction] = useState<'delete' | 'tag' | 'untag' | 'category' | null>(null);
   const [value, setValue] = useState('');
   const search = useRef<HTMLInputElement>(null);
   const results = useRef<HTMLElement>(null);
+  const pendingPageScroll = useRef(false);
   const update = useCallback((patch: Record<string, string | null>, paging = false) => {
     setParams(prev => {
       const next = new URLSearchParams(prev);
       if (!paging) next.delete('page');
       for (const [k, v] of Object.entries(patch)) v ? next.set(k, v) : next.delete(k);
       return next;
-    }, { replace: true });
+    }, { replace: true, preventScrollReset: true });
   }, [setParams]);
 
   useEffect(() => {
@@ -112,6 +114,12 @@ export function HomePage() {
     const last = Math.max(1, Math.ceil(data.total / data.limit));
     if (data.page > last) update({ page: String(last) }, true);
   }, [data, loading, update]);
+  useLayoutEffect(() => {
+    if (!loading && data && pendingPageScroll.current) {
+      pendingPageScroll.current = false;
+      results.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
+  }, [data, loading]);
   useEffect(() => { setSelected(new Set()); }, [info?.libraryId]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -138,6 +146,10 @@ export function HomePage() {
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   }), []);
+  const askDelete = useCallback((id: string) => {
+    setSelected(new Set([id]));
+    setAction('delete');
+  }, []);
   const exitSelect = () => { setSelecting(false); setSelected(new Set()); };
   const run = async (fn: () => Promise<unknown>, message: string) => {
     setBusy(true);
@@ -170,8 +182,8 @@ export function HomePage() {
   const items = data?.items ?? [];
   const pageSelected = items.length > 0 && items.every(a => selected.has(a.id));
   const changePage = (next: number) => {
+    pendingPageScroll.current = true;
     update({ page: String(next) }, true);
-    results.current?.scrollIntoView({ block: 'start' });
   };
 
   return (
@@ -189,7 +201,7 @@ export function HomePage() {
       <div className="filter-bar" aria-label="筛选">
         <button className="fmenu-btn" aria-pressed={favorite} onClick={() => update({ fav: favorite ? null : '1' })}><Heart size={14} />收藏<span className="count">{facets?.favorite ?? 0}</span></button>
         <FilterMenu label="分类" selected={category ? [category] : []} onChange={v => update({ category: v[0] ?? null })}
-          options={categories.map(c => ({ value: c.id, label: localizedName(c.name, c.labels, locale), search: [c.name, ...Object.values(c.labels ?? {})].join(' '), count: facetCount(facets?.categories, c.id) }))}
+          options={[{ value: '__uncategorized__', label: '未分类', count: facetCount(facets?.categories, 'null') }, ...categories.map(c => ({ value: c.id, label: localizedName(c.name, c.labels, locale), search: [c.name, ...Object.values(c.labels ?? {})].join(' '), count: facetCount(facets?.categories, c.id) }))]}
           footer={<Link to="/organize?tab=categories" className="link-btn">管理分类</Link>} />
         <FilterMenu label="框架" selected={fw ? [fw] : []} onChange={v => update({ fw: v[0] ?? null })}
           options={FRAMEWORKS.map(f => ({ value: f.id, label: f.label, count: facetCount(facets?.frameworks, f.id) }))} />
@@ -220,7 +232,7 @@ export function HomePage() {
             <Link to="/new" className="btn btn-dark">添加组件</Link><Link to="/transfer" className="btn btn-quiet">导入组件</Link>
           </div></div>
           : !items.length ? <div className="empty"><p className="empty-title">没有匹配的组件</p><button className="btn" onClick={clear}>清除筛选</button></div>
-          : <AssetGrid key={info.libraryId} items={items}>{a => <AssetCard asset={a} live={liveId === a.id} onLiveChange={setLiveId} locale={locale} tagLabels={tagLabels} activeTags={tagSet} selecting={selecting} selected={selected.has(a.id)} onToggleSelect={toggleSelect} onFavorite={onFavorite} onTag={toggleTag} />}</AssetGrid>}
+          : <AssetGrid key={info.libraryId} items={items}>{a => <AssetCard asset={a} live={liveId === a.id} onLiveChange={setLiveId} locale={locale} tagLabels={tagLabels} activeTags={tagSet} selecting={selecting} selected={selected.has(a.id)} onToggleSelect={toggleSelect} onFavorite={onFavorite} onTag={toggleTag} onDelete={askDelete} />}</AssetGrid>}
       </section>
       {pages > 1 && <nav className="pagination" aria-label="分页">
         <button className="icon-btn" title="上一页" aria-label="上一页" disabled={page <= 1 || loading} onClick={() => changePage(page - 1)}><ChevronLeft size={18} /></button>
@@ -231,13 +243,14 @@ export function HomePage() {
         <span>已选 {selected.size}</span><button className="btn btn-quiet btn-sm" onClick={() => setSelected(prev => { const next = new Set(prev); for (const a of items) pageSelected ? next.delete(a.id) : next.add(a.id); return next; })}>{pageSelected ? '取消本页' : '选择本页'}</button>
         <button className="icon-btn" title="导出所选" aria-label="导出所选" disabled={!selected.size || busy} onClick={exportSelected}><Download size={16} /></button>
         <button className="icon-btn" title="添加标签" aria-label="添加标签" disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('tag'); }}><Tags size={16} /></button>
+        <button className="icon-btn" title="移除标签" aria-label="移除标签" disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('untag'); }}><TagMinus size={16} /></button>
         <button className="icon-btn" title="移动分类" aria-label="移动分类" disabled={!selected.size || busy} onClick={() => { setValue(''); setAction('category'); }}><FolderInput size={16} /></button>
         <button className="icon-btn icon-btn-danger" title="删除所选" aria-label="删除所选" disabled={!selected.size || busy} onClick={() => setAction('delete')}><Trash2 size={16} /></button>
       </div>}
-      <Dialog open={!!action} onClose={() => setAction(null)} locked={busy} title={action === 'delete' ? `删除 ${selected.size} 个组件？` : action === 'tag' ? '添加标签' : '移动分类'}
-        footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>取消</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || (action === 'tag' && !value.trim())} onClick={apply}>{busy ? '处理中…' : action === 'delete' ? '删除' : '应用'}</button></>}>
+      <Dialog open={!!action} onClose={() => setAction(null)} locked={busy} title={action === 'delete' ? `删除 ${selected.size} 个组件？` : action === 'tag' ? '添加标签' : action === 'untag' ? '移除标签' : '移动分类'}
+        footer={<><button className="btn btn-quiet" data-close-dialog disabled={busy}>取消</button><button className={`btn ${action === 'delete' ? 'btn-danger' : 'btn-dark'}`} disabled={busy || ((action === 'tag' || action === 'untag') && !value.trim())} onClick={apply}>{busy ? '处理中…' : action === 'delete' ? '删除' : '应用'}</button></>}>
         {action === 'delete' ? <p>组件的代码、截图和提示词会一并删除，无法恢复。</p>
-          : action === 'tag' ? <label className="field"><span>标签名称</span><input value={value} onChange={e => setValue(e.target.value)} maxLength={30} autoFocus /></label>
+          : action === 'tag' || action === 'untag' ? <label className="field"><span>标签名称</span><input value={value} onChange={e => setValue(e.target.value)} maxLength={30} autoFocus list="asset-tag-names" /><datalist id="asset-tag-names">{tags.map(tag => <option key={tag.name} value={tag.name}>{localizedName(tag.name, tag.labels, locale)}</option>)}</datalist></label>
           : <label className="field"><span>分类</span><SelectControl label="移动到分类" fullWidth value={value} onValueChange={setValue}
             options={[{ value: '', label: '未分类' }, ...categories.map(c => ({ value: c.id, label: c.name }))]} /></label>}
       </Dialog>

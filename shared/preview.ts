@@ -56,7 +56,7 @@ export function thumbnailTransform(container: PreviewViewport, viewport: Preview
     return { scale, x: (container.width - viewport.width * scale) / 2, y: 0 };
   }
   const box = bounds && bounds.width >= 1 && bounds.height >= 1 ? bounds : { x: 0, y: 0, ...viewport };
-  const pad = kind === 'component' ? Math.min(24, container.width * 0.08) : 0;
+  const pad = kind === 'component' ? Math.min(12, container.width * 0.04) : 0;
   const fit = Math.min((container.width - pad * 2) / box.width, (container.height - pad * 2) / box.height);
   const scale = (kind === 'component' ? Math.min(fit, 1) : fit) * z;
   return { scale, x: container.width / 2 - (box.x + box.width / 2) * scale, y: container.height / 2 - (box.y + box.height / 2) * scale };
