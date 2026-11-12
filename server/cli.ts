@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { cliCommand, folderGuide } from '../shared/folderGuide.ts';
+import { cliCommand, folderGuide, quotePath } from '../shared/folderGuide.ts';
 import { frameworkLabel } from '../shared/frameworks.ts';
 import { resolveTheme, themeLabel } from '../shared/theme.ts';
 import type { DuplicateStrategy } from '../shared/types.ts';
@@ -115,14 +115,21 @@ function noteText(kind: string, n: TermNote) {
 
 try {
   if (!command || command === 'guide') {
-    console.log(folderGuide(cliCommand(LOCAL_CLI)));
+    let guideCommand = cliCommand(LOCAL_CLI);
+    let vocabulary: string;
     try {
       const lib = openLibrary();
-      console.log(`\n${vocabularyText(lib)}`);
-      lib.close();
+      try {
+        guideCommand += ` --library ${quotePath(lib.root, LOCAL_CLI.platform)}`;
+        vocabulary = vocabularyText(lib);
+      } finally {
+        lib.close();
+      }
     } catch (e) {
-      console.log(`\n（没能读取素材库里已有的分类和标签：${e instanceof Error ? e.message : e}）`);
+      vocabulary = `（没能读取素材库里已有的分类和标签：${e instanceof Error ? e.message : e}）`;
     }
+    console.log(folderGuide(guideCommand));
+    console.log(`\n${vocabulary}`);
   } else if (command === 'vocab' || command === 'tags') {
     const lib = openLibrary();
     console.log(asJson ? JSON.stringify(libraryVocabulary(lib), null, 2) : vocabularyText(lib));
