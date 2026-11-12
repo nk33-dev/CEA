@@ -173,9 +173,13 @@ describe('asset.json 注释与暗色识别', () => {
     expect(guide).toContain('仅用于素材预览的演示控件及其面板加 data-demo-only 属性');
     expect(guide).toContain('思路只描述目标组件的外观和业务交互');
     expect(guide).toContain('格式检查通过不等于运行验证通过');
+    expect(guide).toContain('交互组件默认等待用户操作');
+    expect(guide).toContain('不为了预览额外添加定时轮播或自动切换');
+    expect(guide).toContain('这些控制不要求组件自动演示');
     const prompt = aiFolderPrompt();
     expect(prompt).toContain('沿用原组件的视觉基准并截图对照');
     expect(prompt).toContain('不另加播放、暂停按钮');
+    expect(prompt).toContain('交互组件默认等待用户操作');
   });
 });
 

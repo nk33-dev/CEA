@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { PreviewBounds, PreviewDevice, PreviewFraming } from '../../shared/preview.ts';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { PreviewBounds, PreviewDevice, PreviewFraming, PreviewLayout } from '../../shared/preview.ts';
 import { DEFAULT_DEVICE_VIEW, DeviceControl, DevicePreview, type DeviceView } from './DevicePreview.tsx';
 import { ZoomControl } from './ZoomControl.tsx';
 import { PreviewBackgroundToggle } from './AppearanceToggle.tsx';
@@ -56,9 +56,10 @@ export function DeviceZoom({ children }: { children?: ReactNode }) {
     {children}</div>;
 }
 
-export function DeviceCanvas({ active = true, children }: { active?: boolean; children: (device: PreviewDevice, onBounds: (bounds: PreviewBounds | null) => void, framing: PreviewFraming) => ReactNode }) {
+export function DeviceCanvas({ active = true, children }: { active?: boolean; children: (device: PreviewDevice, onBounds: (bounds: PreviewBounds | null, layout?: PreviewLayout) => void, framing: PreviewFraming) => ReactNode }) {
   const { view, setView, setFitScale, fullscreen } = useWorkspace();
-  const [bounds, setBounds] = useState<PreviewBounds | null>();
-  return <DevicePreview view={view} bounds={bounds} fullscreen={fullscreen} active={active} onFitScale={setFitScale}
-    onZoomChange={zoom => setView(previous => ({ ...previous, zoom }))}>{children(view.device, setBounds, view.framing ?? 'device')}</DevicePreview>;
+  const [measurement, setMeasurement] = useState<{ bounds: PreviewBounds | null; layout?: PreviewLayout }>();
+  const receiveBounds = useCallback((bounds: PreviewBounds | null, layout?: PreviewLayout) => setMeasurement({ bounds, layout }), []);
+  return <DevicePreview view={view} bounds={measurement?.bounds} boundsLayout={measurement?.layout} fullscreen={fullscreen} active={active} onFitScale={setFitScale}
+    onZoomChange={zoom => setView(previous => ({ ...previous, zoom }))}>{children(view.device, receiveBounds, view.framing ?? 'device')}</DevicePreview>;
 }

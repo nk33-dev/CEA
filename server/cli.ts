@@ -177,7 +177,7 @@ try {
       const r = importPackage(lib, pkg, duplicates);
       console.log(`\n新增 ${r.created}，覆盖 ${r.overwritten}，副本 ${r.copied}，跳过 ${r.skipped}。素材库：${lib.root}`);
       if (r.created || r.overwritten || r.copied) {
-        console.log('预览验收：对照原版，检查电脑和手机、展开的选择控件，以及素材库的暂停、继续和重播。导入成功不代表运行或视觉验收通过。');
+        console.log('预览验收：对照原版检查电脑、手机及实际交互；有连续动效时验证暂停、继续和重播。导入成功不代表运行或视觉验收通过。');
       }
     }
     lib.close();

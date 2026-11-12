@@ -68,6 +68,8 @@ html[data-device="phone"] body{overscroll-behavior:contain}
 html[data-paused] *,html[data-paused] *::before,html[data-paused] *::after{animation-play-state:paused!important}
 body{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;padding:24px;box-sizing:border-box;background:var(--cea-background,var(--stage-bg));color:var(--stage-fg);
 font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;-webkit-font-smoothing:antialiased}
+/* 组件取景由宿主居中；内部高度变化时保持顶部锚点，避免两层居中异步抵消。 */
+:where(html[data-framing="content"]) body,:where(html[data-framing="content"]) #root{align-items:start}
 :where(html[data-framing="device"]) body{padding:0;display:block}
 :where(html[data-framing="device"]) #root{display:block}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:240ms;animation-timing-function:ease}
@@ -123,7 +125,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
           setTimeout(function() { warming = false; setActive(requestedActive&&!document.hidden, requestedInteractive); reportBounds(); }, 1600);
         } else setActive(requestedActive&&!document.hidden, requestedInteractive);
         reportBounds();
-        parent.postMessage({ type: 'cea:ready', bounds: contentBounds() }, '*');
+        parent.postMessage({ type: 'cea:ready', bounds: contentBounds(), layout: currentLayout() }, '*');
         if (window.ResizeObserver) {
           boundsObserver=new ResizeObserver(function() { nativeFrame(reportBounds); });
           observeBounds([]);
@@ -187,12 +189,17 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     boundsObserved=next;
   }
   var lastBounds='';
+  function currentLayout(){
+    return {width:innerWidth,height:innerHeight,framing:document.documentElement.dataset.framing};
+  }
   function reportBounds(){
-    var next=JSON.stringify(contentBounds());
+    var value=contentBounds(),layout=currentLayout();
+    var next=JSON.stringify({value:value,layout:layout});
     if(next===lastBounds)return;
     lastBounds=next;
-    parent.postMessage({ type: 'cea:bounds', value: JSON.parse(next) }, '*');
+    parent.postMessage({ type: 'cea:bounds', value:value, layout:layout }, '*');
   }
+  addEventListener('resize',function(){nativeFrame(reportBounds);});
   document.documentElement.dataset.background=params.get('theme')==='dark'?'dark':'light';
   document.documentElement.dataset.device=params.get('device')==='phone'?'phone':'desktop';
   document.documentElement.dataset.framing=params.get('framing')==='device'?'device':'content';
@@ -231,7 +238,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     var d = e.data || {};
     if(d.type==='cea:probe'){
       parent.postMessage({ type: 'cea:boot' }, '*');
-      if(previewReady){ lastBounds=''; reportBounds(); parent.postMessage({ type: 'cea:ready', bounds: contentBounds() }, '*'); }
+      if(previewReady){ lastBounds=''; reportBounds(); parent.postMessage({ type: 'cea:ready', bounds: contentBounds(), layout: currentLayout() }, '*'); }
     }
     if(d.type==='cea:active'){
       requestedActive=Boolean(d.value);

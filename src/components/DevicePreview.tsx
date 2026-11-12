@@ -11,7 +11,7 @@ import Smartphone from 'lucide-react/icons/smartphone';
 import SlidersHorizontal from 'lucide-react/icons/sliders-horizontal';
 import Trash2 from 'lucide-react/icons/trash-2';
 import Wifi from 'lucide-react/icons/wifi';
-import { DEVICE_VIEWPORTS, type PreviewBounds, type PreviewDevice, type PreviewViewport } from '../../shared/preview.ts';
+import { DEVICE_VIEWPORTS, type PreviewBounds, type PreviewDevice, type PreviewLayout, type PreviewViewport } from '../../shared/preview.ts';
 import { deviceSizeSchema } from '../../shared/configuration.ts';
 import { useDeviceSettings } from '../lib/deviceSettings.ts';
 import { SelectControl } from './SelectControl.tsx';
@@ -168,11 +168,12 @@ function screenTurn(angle: number) {
  * 只有换设备、改尺寸，以及开启「画面自动转正」后转过 45° 时，页面才按新的宽高重新排版，这和真机一致。
  * 全屏按实际窗口排版，设备外壳不参与全屏尺寸。
  */
-export function DevicePreview({ view, fullscreen = false, active = true, bounds, onFitScale, onZoomChange, children }: {
+export function DevicePreview({ view, fullscreen = false, active = true, bounds, boundsLayout, onFitScale, onZoomChange, children }: {
   view: DeviceView;
   active?: boolean;
   fullscreen?: boolean;
   bounds?: PreviewBounds | null;
+  boundsLayout?: PreviewLayout;
   onFitScale?: (scale: number) => void;
   onZoomChange?: (zoom: number) => void;
   children: React.ReactNode;
@@ -185,15 +186,16 @@ export function DevicePreview({ view, fullscreen = false, active = true, bounds,
     onWheel={(ref, event) => { if (event.ctrlKey || event.metaKey) onZoomChange?.(ref.state.scale); }}
     onPinch={ref => onZoomChange?.(ref.state.scale)}
     pinch={{ disabled: false }} panning={{ disabled: false, velocityDisabled: true, allowRightClickPan: false }}>
-    <DevicePreviewCanvas view={view} fullscreen={fullscreen} active={active} bounds={bounds} onFitScale={onFitScale}>{children}</DevicePreviewCanvas>
+    <DevicePreviewCanvas view={view} fullscreen={fullscreen} active={active} bounds={bounds} boundsLayout={boundsLayout} onFitScale={onFitScale}>{children}</DevicePreviewCanvas>
   </TransformWrapper>;
 }
 
-function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitScale, children }: {
+function DevicePreviewCanvas({ view, fullscreen = false, active, bounds: reportedBounds, boundsLayout, onFitScale, children }: {
   view: DeviceView;
   active: boolean;
   fullscreen?: boolean;
   bounds?: PreviewBounds | null;
+  boundsLayout?: PreviewLayout;
   onFitScale?: (scale: number) => void;
   children: React.ReactNode;
 }) {
@@ -225,6 +227,8 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
 
   const physical = fullscreen && box ? { width: Math.round(box.width), height: Math.round(box.height) } : deviceViewport;
   const inspect = !fullscreen && view.framing === 'content';
+  const bounds = !boundsLayout || boundsLayout.width === physical.width && boundsLayout.height === physical.height &&
+    boundsLayout.framing === (view.framing ?? 'device') ? reportedBounds : undefined;
   const bezel = fullscreen || inspect ? { side: 0, top: 0 } : BEZEL[view.device];
   const room = fullscreen ? 0 : ROOM;
   const angle = fullscreen || inspect ? 0 : view.angle;
@@ -318,10 +322,8 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
       window.removeEventListener('message', receive);
     };
   }, [limit.x > 0, limit.y > 0, controls.instance]);
-  const layoutFade = useRef<Animation | null>(null);
   const turnFade = useRef<Animation | null>(null);
   useEffect(() => () => {
-    layoutFade.current?.cancel();
     turnFade.current?.cancel();
   }, []);
 
@@ -349,9 +351,7 @@ function DevicePreviewCanvas({ view, fullscreen = false, active, bounds, onFitSc
       void controls.zoomToPoint(requestedScale, rect.x + rect.width / 2, rect.y + rect.height / 2, 0);
     }
     if (prev.layout !== layout) {
-      layoutFade.current?.cancel();
       turnFade.current?.cancel();
-      if (!fullscreen && !reducedMotion()) layoutFade.current = shellRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' }) ?? null;
       return;
     }
     if (prev.turn !== turn && !view.rotating && !reducedMotion()) {

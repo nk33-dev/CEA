@@ -43,6 +43,7 @@ export function isWideViewport(viewport: PreviewViewport | null | undefined): bo
 
 /** 播放页报告的内容边界，坐标相对 iframe 视口 */
 export interface PreviewBounds { x: number; y: number; width: number; height: number }
+export interface PreviewLayout extends PreviewViewport { framing: PreviewFraming }
 
 /**
  * 缩略图的位置和比例。按内容边界而不是整个视口缩放，舞台留白不会挤占卡片；

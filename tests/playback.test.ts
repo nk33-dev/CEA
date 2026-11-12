@@ -65,7 +65,7 @@ function harness(page = false) {
   const script = page
     ? htmlPlayPage('Test', []).match(/<script>([\s\S]*?)<\/script>/)![1]
     : `${PLAYBACK_SCRIPT}\n({ setActive });`;
-  const control = vm.runInNewContext(script, {
+  const globals = {
     window, document, innerWidth: 1000, innerHeight: 700, performance: { now: () => now }, Element: TestElement,
     getComputedStyle: () => ({ backgroundImage: 'none', backgroundColor: '#fff', boxShadow: 'none', borderTopWidth: '0', borderBottomWidth: '0' }),
     setTimeout: (callback: () => void, delay: number) => { const id = ++sequence; timers.set(id, { at: now + delay, callback }); return id; },
@@ -74,10 +74,16 @@ function harness(page = false) {
       const previous = messages.get(type);
       messages.set(type, event => { previous?.(event); callback(event); });
     },
-  }) as { setActive: (active: boolean, interactive?: boolean) => void };
+  };
+  const control = vm.runInNewContext(script, globals) as { setActive: (active: boolean, interactive?: boolean) => void };
   return {
     control, window, document, animations, players, listeners, messages, attributes, queue, TestElement,
     time: advance,
+    resize(width: number, height: number) {
+      globals.innerWidth = width;
+      globals.innerHeight = height;
+      messages.get('resize')?.({});
+    },
     frame(value: number) { advance(value); const callbacks = [...queue.values()]; queue.clear(); callbacks.forEach(callback => callback(value)); },
   };
 }
@@ -96,6 +102,7 @@ describe('预览播放控制', () => {
     h.frame(32);
     expect(h.window.parent.postMessage).toHaveBeenCalledWith({
       type: 'cea:ready', bounds: { x: 210, y: 130, width: 300, height: 280 },
+      layout: { width: 1000, height: 700, framing: 'content' },
     }, '*');
     h.time(1632);
     const bounds = h.window.parent.postMessage.mock.calls.filter(([message]) => message.type === 'cea:bounds');
@@ -116,6 +123,7 @@ describe('预览播放控制', () => {
     h.frame(32);
     expect(h.window.parent.postMessage).toHaveBeenCalledWith({
       type: 'cea:ready', bounds: { x: 210, y: 130, width: 300, height: 180 },
+      layout: { width: 1000, height: 700, framing: 'content' },
     }, '*');
   });
   it('后台标签页暂停预热和播放，回到前台采用最近的播放意图', async () => {
@@ -154,13 +162,33 @@ describe('预览播放控制', () => {
     expect(h.attributes.has('data-paused')).toBe(false);
     h.time(1648);
     expect(h.attributes.has('data-paused')).toBe(true);
-    expect(h.window.parent.postMessage).toHaveBeenCalledWith({ type: 'cea:ready', bounds: null }, '*');
+    const ready = { type: 'cea:ready', bounds: null, layout: { width: 1000, height: 700, framing: 'content' } };
+    expect(h.window.parent.postMessage).toHaveBeenCalledWith(ready, '*');
     h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:probe' } });
-    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:ready', bounds: null }, '*');
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith(ready, '*');
     const later = vi.fn();
     h.window.requestAnimationFrame(later);
     h.frame(1664);
     expect(later).not.toHaveBeenCalled();
+  });
+
+  it('视口改变后即使内容边界相同也重新报告测量所属的布局', async () => {
+    const h = harness(true);
+    h.listeners.get('DOMContentLoaded')?.();
+    await Promise.resolve();
+    h.frame(16);
+    h.frame(32);
+    h.window.parent.postMessage.mockClear();
+    h.resize(390, 844);
+    h.frame(48);
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({
+      type: 'cea:bounds', value: null, layout: { width: 390, height: 844, framing: 'content' },
+    }, '*');
+    h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:framing', value: 'device' } });
+    h.frame(64);
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({
+      type: 'cea:bounds', value: null, layout: { width: 390, height: 844, framing: 'device' },
+    }, '*');
   });
 
   it('加载中切换播放状态采用最新指令，就绪后仍能通过互动恢复', async () => {

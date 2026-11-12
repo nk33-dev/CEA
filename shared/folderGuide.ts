@@ -27,16 +27,16 @@ export function folderGuide(cli = cliCommand()) {
 particle-hero/
 ├─ asset.json     名称、分类、标签、简介（可省略）
 ├─ idea.zh.md     思路提示词，英文写 idea.en.md（可省略）
-├─ html/          HTML 实现
+├─ html/          HTML 实现（按需）
 │  ├─ markup.html
 │  ├─ style.css
 │  └─ script.js
-├─ react/         React 实现，入口文件默认导出组件
-├─ vue/           Vue 实现，单文件组件
+├─ react/         React 实现（按需），入口文件默认导出组件
+├─ vue/           Vue 实现（按需），单文件组件
 └─ media/         截图或录屏，cover.png 作封面（可省略）
 \`\`\`
 
-html/、react/、vue/ 至少写一种。只有一个 index.html 也行，里面的 <style> 和 <script> 会自动拆开。
+只放实际交付的实现，不要求同时提供 HTML、React、Vue。导入已有素材时沿用原有格式，不为凑齐框架改写；新建素材按需求选择一种或多种。只有一个 index.html 也行，里面的 <style> 和 <script> 会自动拆开。
 
 ## 三种复用内容
 
@@ -97,7 +97,7 @@ titles、categoryLabels 和 tagLabels 是可选的多语言显示名称。title�
 
 ## 代码约定
 
-- 多种实现共用一份 style.css、同样的结构和类名，交互逻辑放进共用的 JS 模块，框架文件只负责挂载和销毁。
+- 需要交付多种实现时，共用一份 style.css、同样的结构和类名，交互逻辑放进共用的 JS 模块，框架文件只负责挂载和销毁；单一实现不需要额外包装。
 - 每种实现只读取自己的框架目录，不会自动打包根目录的 shared/、README.md 或相邻框架的文件。开发时可以维护一份公共源码，交付前将需要的公共文件同步或构建到各框架目录，保持内容一致、相对引用完整；不要只留下指向目录外源码的引用。
 - 预览时 HTML 在 body 里，React、Vue 在 #root 里。最外层元素写 width: 100%、max-width 和 min-width: 0，宽内容在组件内部横向滚动，否则手机宽度下 React、Vue 会溢出。
 - 主题：themes 按框架声明实际能力。mode 可为 original（原始配色）、light、dark 或 both；default 为 light 或 dark，单主题时与 mode 一致。both 才显示组件主题切换。
@@ -110,7 +110,8 @@ titles、categoryLabels 和 tagLabels 是可选的多语言显示名称。title�
 
 ## 预览与动效
 
-- 素材库统一提供播放、暂停和重播。展示型组件不自行添加播放、暂停、重播按钮；播放器、游戏等业务本身需要的控制除外。
+- 保留组件本身的触发方式：列表切换、标签页、菜单等交互组件默认等待用户操作，不为了预览额外添加定时轮播或自动切换。只有原设计或需求包含自主播放时才自动播放。
+- 素材库提供预览动效的播放、暂停和重播，这些控制不要求组件自动演示。展示型组件不自行添加播放、暂停、重播按钮；播放器、游戏等业务本身需要的控制除外。
 - 连续动效使用 CSS animation、Web Animations API 或 window.requestAnimationFrame。Canvas 的时间推进采用 requestAnimationFrame 回调提供的时间戳，或由它累计的帧间隔；预览暂停后应停在当前画面，继续时从该画面接着播放。
 - 不用 setInterval、递归 setTimeout、Date.now 或 performance.now 驱动连续视觉动效，也不另起 Worker、自建时钟或保存未受预览控制的原生帧函数来绕开暂停。离散操作和非视觉业务计时不受此限制。
 - 组件卸载时清理动画、帧回调、计时器、事件监听和观察器。多实例互不干扰，不在 document 上查找并操作其他实例。
@@ -179,9 +180,8 @@ export function aiFolderSteps(info?: Pick<LibraryInfo, 'path' | 'cli'> | null): 
     intro: '做好后按 CEA 素材文件夹交付，并导入我的素材库：',
     steps: [
       { label: '先看格式和素材库已有的分类、标签', command: `${cli} guide${library}` },
-      // guide 里这条最常被略过，做错了三种实现在手机上会不一样，所以在这里再提一句
-      { label: '多种实现共用一份样式和逻辑，手机宽度下也要显示一致' },
-      { label: '沿用原组件的视觉基准并截图对照；展示型组件使用素材库的播放控制，不另加播放、暂停按钮，验证暂停与继续' },
+      { label: '沿用素材已有格式，不必补齐 HTML、React、Vue；新建时按需选技术栈。交付多种实现时共用样式和逻辑，手机宽度下也要显示一致' },
+      { label: '沿用原组件的视觉基准并截图对照；交互组件默认等待用户操作，连续动效验证暂停与继续，不另加播放、暂停按钮' },
       { label: '思路写成可直接发给 AI 的简短需求，技术栈按需指定；源码及公共模块放进各框架目录' },
       { label: '写完导入，报错就按提示改到成功；已存在加 --overwrite', command: `${cli} import <文件夹>${library}` },
     ],

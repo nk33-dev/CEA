@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { playPath } from '../../shared/paths.ts';
-import { CARD_VIEWPORT, fitPreview, previewKind, previewScale, thumbnailTransform, type PreviewBounds, type PreviewDevice, type PreviewFraming, type PreviewViewport } from '../../shared/preview.ts';
+import { CARD_VIEWPORT, fitPreview, previewKind, previewScale, thumbnailTransform, type PreviewBounds, type PreviewDevice, type PreviewFraming, type PreviewLayout, type PreviewViewport } from '../../shared/preview.ts';
 import { usePreviewActivity } from './PreviewActivity.tsx';
 
 export type StageTheme = 'light' | 'dark';
@@ -32,7 +32,7 @@ interface StageProps {
   device?: PreviewDevice;
   framing?: PreviewFraming;
   /** 内容实际占的区域，列表缩略图用来裁掉舞台留白 */
-  onBounds?: (bounds: PreviewBounds | null) => void;
+  onBounds?: (bounds: PreviewBounds | null, layout?: PreviewLayout) => void;
   visibleArea?: PreviewBounds | null;
   thumbnail?: boolean;
 }
@@ -83,12 +83,12 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
         clearTimeout(fallback.current);
         if (readyReported.current) return;
         readyReported.current = true;
-        if ('bounds' in event.data) callbacks.current.onBounds?.(event.data.bounds ?? null);
+        if ('bounds' in event.data) callbacks.current.onBounds?.(event.data.bounds ?? null, event.data.layout);
         setLoaded(true);
         callbacks.current.onReady?.();
       }
       if (event.data?.type === 'cea:resume') callbacks.current.onResume?.();
-      if (event.data?.type === 'cea:bounds') callbacks.current.onBounds?.(event.data.value ?? null);
+      if (event.data?.type === 'cea:bounds') callbacks.current.onBounds?.(event.data.value ?? null, event.data.layout);
     };
     window.addEventListener('message', receive);
     return () => {
@@ -149,9 +149,9 @@ export const PreviewStages = memo(function PreviewStages({ framework, reloadKey 
   const [generations, setGenerations] = useState<Record<string, number>>({});
   const [ready, setReady] = useState<Record<string, boolean>>({});
   const [lastShown, setLastShown] = useState(framework);
-  const bounds = useRef<Record<string, PreviewBounds | null>>({});
+  const bounds = useRef<Record<string, { value: PreviewBounds | null; layout?: PreviewLayout }>>({});
   useEffect(() => {
-    if (framework in bounds.current) onBounds?.(bounds.current[framework]);
+    if (framework in bounds.current) onBounds?.(bounds.current[framework].value, bounds.current[framework].layout);
   }, [framework, onBounds]);
   const displayed = ready[framework] ? framework : lastShown;
   useEffect(() => {
@@ -173,7 +173,7 @@ export const PreviewStages = memo(function PreviewStages({ framework, reloadKey 
           aria-hidden={f !== displayed || undefined} inert={f !== displayed}>
           <ZoomStage zoom={zoom} viewport={viewport}>
             <Stage {...props} loadingIndicator={false} framework={f} active={active && f === framework} onResume={f === framework ? onResume : undefined} reloadKey={generations[f] ?? 0}
-              onBounds={value => { bounds.current[f] = value; if (f === framework) onBounds?.(value); }}
+              onBounds={(value, layout) => { bounds.current[f] = { value, layout }; if (f === framework) onBounds?.(value, layout); }}
               onReady={() => setReady(prev => prev[f] ? prev : { ...prev, [f]: true })} />
           </ZoomStage>
         </div>
