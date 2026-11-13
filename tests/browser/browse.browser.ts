@@ -131,8 +131,9 @@ test('visible previews load together and language changes preserve frames', asyn
   }).toBe(true);
   expect(Math.max(...started) - Math.min(...started)).toBeLessThan(1000);
   const before = await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')));
-  const languages = page.getByRole('radiogroup', { name: '内容语言', exact: true });
-  await languages.getByRole('radio').last().check();
+  await page.getByRole('button', { name: '语言', exact: true }).click();
+  await page.getByRole('radiogroup', { name: '内容语言', exact: true }).getByRole('radio', { name: 'English', exact: true }).check();
+  await page.keyboard.press('Escape');
   expect(await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')))).toEqual(before);
 });
 
