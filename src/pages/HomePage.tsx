@@ -21,7 +21,6 @@ import { AssetGrid } from '../components/AssetGrid.tsx';
 import { FilterMenu } from '../components/FilterMenu.tsx';
 import { Dialog } from '../components/Dialog.tsx';
 import { SelectControl } from '../components/SelectControl.tsx';
-import { ContentLanguage } from '../components/ContentLanguage.tsx';
 import { PreviewActivity, PreviewActivityStatus } from '../components/PreviewActivity.tsx';
 import { localizedName } from '../../shared/contentLocale.ts';
 import { api, errorMessage } from '../lib/api.ts';
@@ -196,7 +195,6 @@ export function HomePage() {
             onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} />
           {query ? <button className="search-clear" aria-label={uiText("清空搜索")} onClick={() => setQuery('')}><X size={14} /></button> : <kbd>Ctrl K</kbd>}
         </label>
-        <ContentLanguage />
         <button className={`btn btn-quiet${selecting ? ' is-active' : ''}`} onClick={() => selecting ? exitSelect() : setSelecting(true)} aria-pressed={selecting}>{selecting ? uiText("完成") : uiText("批量管理")}</button>
         <Link to="/new" className="btn btn-dark"><Plus size={16} />{uiText("添加")}</Link>
       </div>
