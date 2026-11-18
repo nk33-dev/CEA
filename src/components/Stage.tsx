@@ -256,8 +256,8 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (inView && !ready && !failed) return activity?.begin();
-  }, [activity, inView, ready, failed]);
+    if (inView && props.loadingIndicator !== false && !ready && !failed) return activity?.begin();
+  }, [activity, inView, ready, failed, props.loadingIndicator]);
   const kind = previewKind(viewport);
   const view = viewport ?? CARD_VIEWPORT;
   useEffect(() => {

@@ -14,7 +14,7 @@ import { useLibrary } from '../lib/store.tsx';
 import { FitStage, useInView } from './Stage.tsx';
 import { localizedTitle, translatedValue } from '../../shared/contentLocale.ts';
 import { preloadDetailPage } from '../lib/detailRoute.ts';
-import { useRetainedPreview } from './PreviewActivity.tsx';
+import { usePreviewActivity, useRetainedPreview } from './PreviewActivity.tsx';
 import { previewKind, previewScale } from '../../shared/preview.ts';
 
 interface CardProps {
@@ -42,6 +42,8 @@ const MAX_TAGS = 3;
 export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, locale, tagLabels, activeTags, selecting, selected, onToggleSelect, onFavorite, onTag, onDelete }: CardProps) {
   useUi();
   const { ref, inView } = useInView<HTMLDivElement>();
+  const { ref: visibleRef, inView: visible } = useInView<HTMLElement>('0px', 0.1);
+  const { activity } = usePreviewActivity();
   const { notify } = useLibrary();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -49,19 +51,21 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const [replay, setReplay] = useState(0);
   const [saving, setSaving] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
+  const [visited, setVisited] = useState(false);
   const favoriteBusy = useRef(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(leaveTimer.current), []);
   const wantsLive = !selecting && !paused && (live || hovered || focused);
   useEffect(() => setCoverFailed(false), [asset.cover, asset.updatedAt]);
-  const retained = useRetainedPreview(asset.id, inView && (!asset.cover || coverFailed || wantsLive));
+  const retained = useRetainedPreview(asset.id, inView && (!asset.cover || coverFailed || wantsLive), visible && !selecting && !!asset.cover && !coverFailed);
   const mounted = retained && asset.frameworks.length > 0;
   const active = mounted && inView && wantsLive;
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
-  const start = () => { setPaused(false); onLiveChange(asset.id); };
+  const start = () => { setVisited(true); setPaused(false); onLiveChange(asset.id); };
   const summary = translatedValue(asset.summaries, locale, text => text);
   const extraTags = asset.tags.length - MAX_TAGS;
   const title = localizedTitle(asset, locale);
+  const showLive = !asset.cover || coverFailed || visited;
 
   const toggleFavorite = async () => {
     if (favoriteBusy.current) return;
@@ -81,16 +85,19 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   };
 
   return (
-    <article data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
-      <div className="card-stage" ref={ref}
-        onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setHovered(true); setPaused(false); } }}
+    <article ref={visibleRef} data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
+      <div className="card-stage" data-live={showLive || undefined} ref={ref}
+        onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setVisited(true); setHovered(true); setPaused(false); } }}
         onPointerLeave={() => { leaveTimer.current = setTimeout(() => setHovered(false), 180); }}
-        onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
+        onFocusCapture={() => { setVisited(true); setFocused(true); }} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
         {asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
           style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
           src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
-        {mounted && <FitStage assetId={asset.id} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
-          active={active} onResume={resume} reloadKey={replay} />}
+        {mounted && <FitStage assetId={asset.id} framework={asset.frameworks[0]} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
+          active={active} onResume={resume} reloadKey={replay}
+          loadingIndicator={!asset.cover || coverFailed || wantsLive}
+          onReady={() => activity?.ready(asset.id)}
+          onError={() => activity?.ready(asset.id)} />}
         {selecting ? (
           <button type="button" className="card-select" aria-pressed={selected} aria-label={uiText("选择「{{value0}}」", {value0: title})} onClick={() => onToggleSelect(asset.id)}>
             <span className="card-check">{selected && <Check size={13} strokeWidth={3} aria-hidden="true" />}</span>

@@ -30,7 +30,10 @@ test.beforeAll(async () => {
       { resourceData: { [`${framework}/images/art.png`]: PNG } });
   }
   lib.createAsset({ id: 'covered-html', title: 'Covered component', categoryId: null, tags: [], sourceName: '', sourceUrl: '', texts: {}, previewScale: 1.5,
-    variants: [{ framework: 'html', entry: 'markup.html', dependencies: {}, files: [{ path: 'markup.html', content: '<div style="width:120px;height:80px;background:tomato">Small live content</div>' }] }] });
+    variants: [{ framework: 'html', entry: 'markup.html', dependencies: {}, files: [
+      { path: 'markup.html', content: '<div style="width:120px;height:80px;background:tomato"><button>Small live content</button></div>' },
+      { path: 'script.js', content: "document.querySelector('button').onclick=event=>event.currentTarget.dataset.clicked='true';" },
+    ] }] });
   lib.addMedia('covered-html', 'cover.svg', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="tomato"/></svg>'));
   lib.createAsset({ id: 'bounded-canvas', title: 'Bounded canvas', categoryId: null, tags: [], sourceName: '', sourceUrl: '', texts: {},
     previewViewport: { width: 720, height: 960 },
@@ -38,7 +41,46 @@ test.beforeAll(async () => {
       path: 'markup.html',
       content: '<div data-preview-bounds style="margin:24px;width:672px;height:600px;background:#101113"><span style="display:block;width:20px;height:20px">A</span></div>',
     }] }] });
+  lib.createAsset({ id: 'painted-frame', title: 'Painted frame', categoryId: null, tags: [], sourceName: '', sourceUrl: '', texts: {},
+    previewViewport: { width: 720, height: 960 },
+    variants: [{ framework: 'html', entry: 'markup.html', dependencies: {}, files: [{
+      path: 'markup.html',
+      content: '<div data-preview-bounds style="box-sizing:border-box;width:720px;height:144px;padding:32px;background:#101113;color:white">Heading with a painted frame</div>',
+    }] }] });
+  lib.addMedia('painted-frame', 'cover.svg', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="288"><rect width="1440" height="288" fill="#101113"/></svg>'));
   ({ server, base } = await listenForFetch(createApp({ lib }, { distDir: path.resolve('dist') })));
+});
+
+test('a high-density cover and its padded painted frame keep the same crop', async ({ page }) => {
+  await page.goto(`${base}/?q=Painted`);
+  await page.mouse.move(0, 0);
+  const card = page.locator('[data-asset-id="painted-frame"]');
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  const stage = card.locator('.card-stage');
+  const darkBounds = async () => {
+    const png = await stage.screenshot({ scale: 'css' });
+    return page.evaluate(async source => {
+      const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(source), c => c.charCodeAt(0))], { type: 'image/png' }));
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(bitmap, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let left = canvas.width, right = 0, top = canvas.height, bottom = 0;
+      for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+        const at = (y * canvas.width + x) * 4;
+        if (pixels[at] < 40 && pixels[at + 1] < 40 && pixels[at + 2] < 40) {
+          left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+        }
+      }
+      return { left, right, top, bottom };
+    }, png.toString('base64'));
+  };
+  const before = await darkBounds();
+  await stage.hover();
+  await expect(card.locator('.card-cover')).toBeHidden();
+  const after = await darkBounds();
+  for (const edge of ['left', 'right', 'top', 'bottom'] as const) expect(Math.abs(after[edge] - before[edge])).toBeLessThanOrEqual(1);
 });
 
 test('a cover hands off to the ready live frame without cross-fading different compositions', async ({ page }) => {
@@ -47,7 +89,10 @@ test('a cover hands off to the ready live frame without cross-fading different c
   const card = page.locator('[data-asset-id="covered-html"]');
   const cover = card.locator('.card-cover');
   await expect(cover).toBeVisible();
-  await expect(card.locator('iframe')).toHaveCount(0);
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  await expect(cover).toBeVisible();
+  await expect(card.locator('.fit-stage')).toBeHidden();
+  const existingFrame = await card.locator('iframe').getAttribute('src');
   await card.locator('.card-stage').hover();
   await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
   await expect(card.locator('iframe')).toHaveAttribute('title', '');
@@ -57,9 +102,12 @@ test('a cover hands off to the ready live frame without cross-fading different c
   await expect(live).toHaveCSS('opacity', '1');
   await expect(live).toHaveCSS('transition-duration', '0s');
   await expect(card.frameLocator('iframe').getByText('Small live content')).toBeVisible();
+  await card.frameLocator('iframe').getByRole('button', { name: 'Small live content' }).click();
+  await expect(card.frameLocator('iframe').locator('button')).toHaveAttribute('data-clicked', 'true');
+  expect(await card.locator('iframe').getAttribute('src')).toBe(existingFrame);
   const frame = await card.locator('iframe').boundingBox();
   const content = await card.frameLocator('iframe').getByText('Small live content').evaluate(element => {
-    const rect = element.getBoundingClientRect();
+    const rect = element.parentElement!.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewport: innerWidth };
   });
   const image = await cover.evaluate(element => {

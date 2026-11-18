@@ -245,6 +245,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     if(d.type==='cea:active'){
       requestedActive=Boolean(d.value);
       requestedInteractive=Boolean(d.interactive);
+      if(requestedActive)warming=false;
       if(previewReady&&!warming)setActive(requestedActive&&!document.hidden, requestedInteractive);
     }
     if(d.type==='cea:component-theme'&&chosenTheme(d.value)!==(document.documentElement.dataset.theme||''))switchTheme(function(){componentTheme(d.value);});

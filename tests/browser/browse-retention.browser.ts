@@ -29,6 +29,44 @@ test('a cover remains visible and a visited preview survives scrolling away and 
   expect(await page.locator('iframe').count()).toBeLessThanOrEqual(12);
 });
 
+test('visible covers warm two at a time and a hovered card bypasses the queue', async ({ page }) => {
+  const { assets } = await mockLibrary(page);
+  const template = structuredClone(assets.get('demo-a')!);
+  assets.clear();
+  for (let index = 0; index < 1000; index++) {
+    const id = `warm-${String(index).padStart(4, '0')}`;
+    assets.set(id, { ...structuredClone(template), id, title: id, texts: {}, cover: `assets/${id}/media/cover.png` });
+  }
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const started: string[] = [];
+  await page.route('**/play/**', async route => {
+    started.push(new URL(route.request().url()).pathname);
+    await gate;
+    await route.fallback();
+  });
+  await page.goto('/');
+  await page.mouse.move(0, 0);
+  await expect.poll(() => started.length).toBe(2);
+  await expect(page.locator('.browse-progress')).not.toHaveAttribute('data-busy', 'true');
+  expect(await page.locator('iframe').count()).toBe(2);
+  const target = page.locator('[data-asset-id="warm-0002"]');
+  await target.locator('.card-stage').hover();
+  await expect.poll(() => started.length).toBe(3);
+  expect(started.at(-1)).toContain('/warm-0002/');
+  release();
+  await expect(target.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  await target.frameLocator('iframe').getByRole('button', { name: '0', exact: true }).click();
+  await expect(target.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
+  await expect.poll(() => started.length).toBe(6);
+  await expect(page.locator('iframe')).toHaveCount(6);
+  for (const card of await page.locator('.card').all()) {
+    if (await card.getAttribute('data-asset-id') === 'warm-0002') continue;
+    await expect(card.locator('.card-cover')).toBeVisible();
+  }
+  expect(started.some(url => url.includes('/warm-0006/'))).toBe(false);
+});
+
 test('a page change keeps the current cards until the replacement is ready', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   const template = structuredClone(assets.get('demo-a')!);

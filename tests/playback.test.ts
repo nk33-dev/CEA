@@ -224,6 +224,19 @@ describe('预览播放控制', () => {
     expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:resume' }, '*');
   });
 
+  it('悬停接管预热后，暂停指令立即生效，不等待入场计时结束', async () => {
+    const h = harness(true);
+    h.listeners.get('DOMContentLoaded')?.();
+    await Promise.resolve();
+    h.frame(16);
+    h.frame(32);
+    h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:active', value: true, interactive: true } });
+    h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:active', value: false, interactive: true } });
+    expect(h.attributes.has('data-paused')).toBe(true);
+    h.time(1632);
+    expect(h.attributes.has('data-paused')).toBe(true);
+  });
+
   it('暂停逐帧回调，继续时扣除暂停时长而不是跳到结束', () => {
     const h = harness();
     const callback = vi.fn();

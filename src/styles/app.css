@@ -459,7 +459,8 @@ input:is([type=checkbox], [type=radio]):focus-visible { outline: 2px solid var(-
 .card-cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: scale-down; padding: min(12px, 4%); }
 .card-cover[data-kind=section] { object-fit: contain; padding: 0; }
 .card-cover[data-kind=page] { height: auto; padding: 0; transform-origin: top center; }
-.card-stage:has(.fit-stage[data-ready]) .card-cover { visibility: hidden; }
+.card-stage[data-live]:has(.fit-stage[data-ready]) .card-cover { visibility: hidden; }
+.card-stage:not([data-live]) .fit-stage { visibility: hidden; }
 .fit-stage { position: absolute; inset: 0; overflow: hidden; }
 .fit-stage-inner { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
 .preview-failure { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 16px; background: var(--surface); color: var(--fg-2); font-size: 13px; z-index: 4; }

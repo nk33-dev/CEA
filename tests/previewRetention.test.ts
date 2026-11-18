@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { createActivity, MAX_RETAINED_PREVIEWS } from '../src/components/PreviewActivity.tsx';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createActivity, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS } from '../src/components/PreviewActivity.tsx';
+
+afterEach(() => vi.useRealTimers());
 
 describe('列表预览预算', () => {
   it('最近操作的预览保留，最早未使用的实例按预算释放', () => {
@@ -27,5 +29,41 @@ describe('列表预览预算', () => {
     expect(activity.snapshot()).toBe(0);
     activity.release('a'); activity.release('a');
     expect(activity.resident()).toEqual([]);
+  });
+
+  it('可见封面限量预热，悬停不用等待预热队列', () => {
+    vi.useFakeTimers();
+    const activity = createActivity();
+    for (let index = 0; index < 6; index++) activity.prewarm(String(index));
+    expect(activity.resident()).toEqual([]);
+    vi.advanceTimersByTime(120);
+    expect(activity.resident()).toHaveLength(MAX_WARMING_PREVIEWS);
+    activity.retain('5');
+    expect(activity.resident()).toContain('5');
+    expect(activity.snapshot()).toBe(0);
+    activity.ready('0');
+    vi.advanceTimersByTime(120);
+    expect(activity.resident()).toContain('2');
+    expect(activity.resident()).not.toContain('3');
+    activity.ready('1');
+    activity.ready('2');
+    vi.advanceTimersByTime(120);
+    expect(activity.resident()).toContain('3');
+    expect(activity.resident()).toContain('4');
+    expect(activity.resident().filter(id => id === '5')).toHaveLength(1);
+  });
+
+  it('卡片离开视口时取消尚未开始的预热', () => {
+    vi.useFakeTimers();
+    const activity = createActivity();
+    const cancel = activity.prewarm('offscreen');
+    cancel();
+    vi.runAllTimers();
+    expect(activity.resident()).toEqual([]);
+    const cancelNext = activity.prewarm('next');
+    vi.advanceTimersByTime(120);
+    cancelNext();
+    activity.ready('next');
+    expect(activity.resident()).toEqual(['next']);
   });
 });
