@@ -1,5 +1,6 @@
 import type { CodeFile } from '../shared/types.ts';
 import { PLAYBACK_SCRIPT } from './playback.ts';
+import { PREVIEW_HEALTH_SCRIPT } from './previewHealth.ts';
 import { PREVIEW_OVERLAY_SCRIPT } from './previewOverlays.ts';
 import { PREVIEW_NAVIGATION_SCRIPT } from './previewNavigation.ts';
 import type { ThemeContract } from '../shared/theme.ts';
@@ -91,6 +92,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   document.addEventListener('pointerdown',prepareSelect,true);
   document.addEventListener('focusin',prepareSelect,true);
   ${PLAYBACK_SCRIPT}
+  ${PREVIEW_HEALTH_SCRIPT}
   ${PREVIEW_OVERLAY_SCRIPT}
   ${PREVIEW_NAVIGATION_SCRIPT}
   var keyboardFocus=false;
@@ -117,14 +119,24 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     var fonts = document.fonts ? document.fonts.ready : Promise.resolve();
     fonts.then(function() {
       nativeFrame(function() { nativeFrame(function() {
+        if(document.querySelector('[data-cea-build-error]'))reportPreviewFault('compile');
+        if(previewFault)return;
         previewReady = true;
         // 以暂停状态加载的预览（列表缩略图）如果立刻暂停，入场动画会停在第一帧，内容是空的；先播一会儿再停。
         // 播放期间收到的指令记下来，播完再生效
         if (!requestedActive) {
           warming = true;
           setActive(!document.hidden, requestedInteractive);
-          setTimeout(function() { warming = false; setActive(requestedActive&&!document.hidden, requestedInteractive); reportBounds(); }, 1600);
-        } else setActive(requestedActive&&!document.hidden, requestedInteractive);
+          setTimeout(function() {
+            warming = false;
+            setActive(!previewFault&&requestedActive&&!document.hidden, requestedInteractive);
+            reportBounds();
+            parent.postMessage({type:'cea:warmed'},'*');
+          }, 1600);
+        } else {
+          setActive(requestedActive&&!document.hidden, requestedInteractive);
+          parent.postMessage({type:'cea:warmed'},'*');
+        }
         reportBounds();
         parent.postMessage({ type: 'cea:ready', bounds: contentBounds(), layout: currentLayout() }, '*');
         if (window.ResizeObserver) {
@@ -219,7 +231,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   }
   componentTheme(params.get('componentTheme'));
   document.addEventListener('visibilitychange', function(){
-    if(previewReady)setActive(!document.hidden&&(warming||requestedActive), requestedInteractive);
+    if(previewReady)setActive(!previewFault&&!document.hidden&&(warming||requestedActive), requestedInteractive);
   });
   // 外层在预览就绪时会把当前主题再发一遍，值没变就什么都不做：
   // 空转一次 view transition 会截一张整页快照再淡入，卡片在这一瞬间会闪白。
@@ -240,13 +252,16 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     var d = e.data || {};
     if(d.type==='cea:probe'){
       parent.postMessage({ type: 'cea:boot' }, '*');
+      if(gpuCount)parent.postMessage({type:'cea:resources',gpu:gpuCount},'*');
+      if(previewFault){parent.postMessage({type:'cea:error',reason:'runtime'},'*');return;}
+      if(previewReady&&!warming)parent.postMessage({type:'cea:warmed'},'*');
       if(previewReady){ lastBounds=''; reportBounds(); parent.postMessage({ type: 'cea:ready', bounds: contentBounds(), layout: currentLayout() }, '*'); }
     }
     if(d.type==='cea:active'){
       requestedActive=Boolean(d.value);
       requestedInteractive=Boolean(d.interactive);
-      if(requestedActive)warming=false;
-      if(previewReady&&!warming)setActive(requestedActive&&!document.hidden, requestedInteractive);
+      if(requestedActive&&warming){warming=false;parent.postMessage({type:'cea:warmed'},'*');}
+      if(previewReady&&!warming)setActive(!previewFault&&requestedActive&&!document.hidden, requestedInteractive);
     }
     if(d.type==='cea:component-theme'&&chosenTheme(d.value)!==(document.documentElement.dataset.theme||''))switchTheme(function(){componentTheme(d.value);});
     if(d.type==='cea:device')document.documentElement.dataset.device=d.value==='phone'?'phone':'desktop';
@@ -295,7 +310,7 @@ ${moduleCode ? `<script>\n${escapeScript(moduleCode)}\n</script>` : ''}
 /** React、Vue 等打包后的实现：挂载到 #root */
 export function bundlePlayPage(title: string, bundle: string, error: string | null, options?: StageOptions): string {
   const body = error
-    ? `<pre style="max-width:640px;white-space:pre-wrap;font:12px/1.6 ui-monospace,Consolas,monospace;color:#b42318;background:#fff4f2;border:1px solid #ffd2cc;border-radius:12px;padding:16px">${escapeHtml(error)}</pre>`
+    ? `<pre data-cea-build-error style="max-width:640px;white-space:pre-wrap;font:12px/1.6 ui-monospace,Consolas,monospace;color:#b42318;background:#fff4f2;border:1px solid #ffd2cc;border-radius:12px;padding:16px">${escapeHtml(error)}</pre>`
     : `<div id="root"></div>\n<script>\n${escapeScript(bundle)}\n</script>`;
   return `<!doctype html>
 <html lang="en">

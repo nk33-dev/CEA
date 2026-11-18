@@ -60,6 +60,10 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const retained = useRetainedPreview(asset.id, inView && (!asset.cover || coverFailed || wantsLive), visible && !selecting && !!asset.cover && !coverFailed);
   const mounted = retained && asset.frameworks.length > 0;
   const active = mounted && inView && wantsLive;
+  useEffect(() => {
+    activity?.activate(asset.id, active);
+    return () => activity?.activate(asset.id, false);
+  }, [activity, asset.id, active]);
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
   const start = () => { setVisited(true); setPaused(false); onLiveChange(asset.id); };
   const summary = translatedValue(asset.summaries, locale, text => text);
@@ -96,7 +100,8 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
         {mounted && <FitStage assetId={asset.id} framework={asset.frameworks[0]} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
           active={active} onResume={resume} reloadKey={replay}
           loadingIndicator={!asset.cover || coverFailed || wantsLive}
-          onReady={() => activity?.ready(asset.id)}
+          onWarm={() => activity?.ready(asset.id)}
+          onResources={contexts => activity?.resources(asset.id, contexts)}
           onError={() => activity?.ready(asset.id)} />}
         {selecting ? (
           <button type="button" className="card-select" aria-pressed={selected} aria-label={uiText("选择「{{value0}}」", {value0: title})} onClick={() => onToggleSelect(asset.id)}>

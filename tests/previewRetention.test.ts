@@ -1,9 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createActivity, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS } from '../src/components/PreviewActivity.tsx';
+import { createActivity, MAX_GPU_CONTEXTS, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS } from '../src/components/PreviewActivity.tsx';
 
 afterEach(() => vi.useRealTimers());
 
 describe('列表预览预算', () => {
+  it('按实际 WebGL 上下文限制驻留，不挤掉正在操作的预览和普通组件', () => {
+    const activity = createActivity();
+    activity.retain('plain');
+    activity.retain('interactive');
+    activity.activate('interactive', true);
+    activity.resources('interactive', 2);
+    for (let i = 0; i < MAX_GPU_CONTEXTS; i++) {
+      activity.retain(`gpu-${i}`);
+      activity.resources(`gpu-${i}`, 1);
+    }
+    expect(activity.resident()).toContain('plain');
+    expect(activity.resident()).toContain('interactive');
+    expect(activity.resident().filter(id => id.startsWith('gpu-'))).toHaveLength(MAX_GPU_CONTEXTS - 2);
+    expect(activity.resident()).not.toContain('gpu-0');
+    activity.resources('evicted', 100);
+    expect(activity.resident()).toContain('interactive');
+    activity.release('interactive');
+    expect(activity.resident()).not.toContain('interactive');
+  });
   it('最近操作的预览保留，最早未使用的实例按预算释放', () => {
     const activity = createActivity();
     for (let index = 0; index < MAX_RETAINED_PREVIEWS; index++) activity.retain(String(index));

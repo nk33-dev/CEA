@@ -31,6 +31,8 @@ interface StageProps {
   zoom?: number;
   onReady?: () => void;
   onError?: () => void;
+  onWarm?: () => void;
+  onResources?: (gpu: number) => void;
   loadingIndicator?: boolean;
   errorIndicator?: boolean;
   viewport?: PreviewViewport | null;
@@ -46,7 +48,7 @@ interface StageProps {
  * 所有素材都通过统一的 /play/<id>/<framework>/ 地址播放，HTML、React、Vue 一样。
  * iframe 在沙箱里运行，主题通过 postMessage 切换，不用重新加载。
  */
-export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onReady, onError, onBounds, visibleArea, loadingIndicator = true, errorIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
+export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onReady, onError, onWarm, onResources, onBounds, visibleArea, loadingIndicator = true, errorIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
   useUi();
   const [initialTheme] = useState(theme);
   const [initialComponentTheme] = useState(componentTheme);
@@ -65,36 +67,55 @@ export const Stage = memo(function Stage({ assetId, framework, src, title, theme
   return (
     <div className="stage-host" aria-busy={pending && failed !== request} data-theme={theme}>
       {displayed && <StageFrame key={displayed.request} src={displayed.url} title={title} className={className}
-        theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={pending ? false : active} inert={pending || inert} standby={pending} onResume={pending ? undefined : onResume} onBounds={pending ? undefined : onBounds} />}
+        theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={pending ? false : active} inert={pending || inert} standby={pending} onResume={pending ? undefined : onResume} onBounds={pending ? undefined : onBounds}
+        onWarm={pending ? undefined : onWarm} onResources={pending ? undefined : onResources}
+        onReady={pending ? undefined : () => { setFailed(null); onReady?.(); }}
+        onError={pending ? undefined : () => { setFailed(request); onError?.(); }} />}
       {pending && <StageFrame key={request} src={url} title={title} className={className}
         theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={active} inert={inert} onResume={onResume}
         onReady={() => { setFailed(null); setDisplayed({ request, url }); onReady?.(); }}
-        onError={() => { setFailed(request); onError?.(); }} onBounds={onBounds} />}
+        onError={() => { setFailed(request); onError?.(); }} onWarm={onWarm} onResources={onResources} onBounds={onBounds} />}
       {loadingIndicator && <PreviewLoading busy={pending && failed !== request} />}
-      {errorIndicator && pending && failed === request && <PreviewFailure onRetry={() => setRetry(value => value + 1)} />}
+      {errorIndicator && failed === request && <PreviewFailure onRetry={() => setRetry(value => value + 1)} />}
     </div>
   );
 });
 
-function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, className, onReady, onError, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
+function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, className, onReady, onError, onWarm, onResources, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
   useUi();
   const ref = useRef<HTMLIFrameElement>(null);
   const hasRuntime = useRef(false);
   const readyReported = useRef(false);
+  const errorReported = useRef(false);
   const fallback = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
-  const callbacks = useRef({ onReady, onResume, onBounds, onError });
-  callbacks.current = { onReady, onResume, onBounds, onError };
+  const callbacks = useRef({ onReady, onResume, onBounds, onError, onWarm, onResources });
+  callbacks.current = { onReady, onResume, onBounds, onError, onWarm, onResources };
   useEffect(() => {
-    const deadline = setTimeout(() => { if (!readyReported.current) callbacks.current.onError?.(); }, 12000);
+    const fail = () => {
+      if (errorReported.current) return;
+      errorReported.current = true;
+      readyReported.current = false;
+      callbacks.current.onError?.();
+    };
+    const deadline = setTimeout(() => { if (!readyReported.current) fail(); }, 12000);
     const receive = (event: MessageEvent) => {
       if (event.source !== ref.current?.contentWindow) return;
       if (event.data?.type === 'cea:boot') hasRuntime.current = true;
+      if (event.data?.type === 'cea:error') {
+        hasRuntime.current = true;
+        clearTimeout(deadline);
+        clearTimeout(fallback.current);
+        fail();
+      }
+      if (event.data?.type === 'cea:warmed') callbacks.current.onWarm?.();
+      if (event.data?.type === 'cea:resources' && Number.isSafeInteger(event.data.gpu) && event.data.gpu > 0) callbacks.current.onResources?.(event.data.gpu);
       if (event.data?.type === 'cea:ready') {
         hasRuntime.current = true;
         clearTimeout(deadline);
         clearTimeout(fallback.current);
         if (readyReported.current) return;
+        errorReported.current = false;
         readyReported.current = true;
         if ('bounds' in event.data) callbacks.current.onBounds?.(event.data.bounds ?? null, event.data.layout);
         setLoaded(true);
@@ -148,6 +169,7 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
             callbacks.current.onBounds?.(null);
             setLoaded(true);
             callbacks.current.onReady?.();
+            callbacks.current.onWarm?.();
           }
         }, 1200);
       }}
@@ -191,7 +213,7 @@ export const PreviewStages = memo(function PreviewStages({ framework, reloadKey 
           <ZoomStage zoom={zoom} viewport={viewport}>
             <Stage {...props} loadingIndicator={false} errorIndicator={false} framework={f} active={active && f === framework} onResume={f === framework ? onResume : undefined} reloadKey={generations[f] ?? 0}
               onBounds={(value, layout) => { bounds.current[f] = { value, layout }; if (f === framework) onBounds?.(value, layout); }}
-              onError={() => setFailed(prev => ({ ...prev, [f]: true }))}
+              onError={() => { setFailed(prev => ({ ...prev, [f]: true })); setReady(prev => ({ ...prev, [f]: false })); }}
               onReady={() => { setFailed(prev => prev[f] ? { ...prev, [f]: false } : prev); setReady(prev => prev[f] ? prev : { ...prev, [f]: true }); }} />
           </ZoomStage>
         </div>
@@ -219,7 +241,7 @@ function PreviewFailure({ onRetry }: { onRetry: () => void }) {
   const [container, setContainer] = useState<HTMLElement | null>(null);
   // 设备画布可能只显示组件的一小块；错误操作留在未缩放的外层，避免落到取景范围之外。
   useLayoutEffect(() => { setContainer(anchor.current?.closest<HTMLElement>('.device-preview') ?? null); }, []);
-  const panel = <div className="preview-failure" role="alert"><span>{uiText('预览加载超时')}</span>
+  const panel = <div className="preview-failure" role="alert"><span>{uiText('预览未能运行')}</span>
     <button type="button" className="btn btn-sm" onClick={onRetry}><RotateCcw size={14} />{uiText('重试预览')}</button>
   </div>;
   return <><span ref={anchor} hidden />{container ? createPortal(panel, container) : panel}</>;
@@ -282,7 +304,7 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
         </div>
       )}
       {!activity && <PreviewLoading busy={!ready && !failed} />}
-      {failed && <PreviewFailure onRetry={() => { setFailed(false); setAttempt(value => value + 1); }} />}
+      {failed && <PreviewFailure onRetry={() => { setFailed(false); setReady(false); setAttempt(value => value + 1); }} />}
     </div>
   );
 }

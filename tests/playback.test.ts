@@ -51,7 +51,7 @@ function harness(page = false) {
     fonts: { ready: Promise.resolve() },
     body: { children: [] as unknown[] },
     getElementById: () => null,
-    querySelector: vi.fn((): unknown => null),
+    querySelector: vi.fn((_selector: string): unknown => null),
     getAnimations: () => animations,
     querySelectorAll: () => players,
     addEventListener: (type: string, callback: (event?: { isTrusted: boolean }) => void) => {
@@ -134,7 +134,7 @@ describe('预览播放控制', () => {
       tagName: 'SECTION', offsetWidth: 600, offsetHeight: 460, offsetLeft: 0, offsetTop: 0, offsetParent: null,
       matches: () => false, children: [icon],
     };
-    h.document.querySelector.mockReturnValue({ getAttribute: () => 'children', children: [canvas] });
+    h.document.querySelector.mockImplementation(selector => selector === '[data-preview-bounds]' ? { getAttribute: () => 'children', children: [canvas] } : null);
     h.listeners.get('DOMContentLoaded')?.();
     await Promise.resolve();
     h.frame(16);
@@ -182,7 +182,9 @@ describe('预览播放控制', () => {
     expect(h.attributes.has('data-paused')).toBe(true);
     const ready = { type: 'cea:ready', bounds: null, layout: { width: 1000, height: 700, framing: 'content' } };
     expect(h.window.parent.postMessage).toHaveBeenCalledWith(ready, '*');
+    h.window.parent.postMessage.mockClear();
     h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:probe' } });
+    expect(h.window.parent.postMessage).toHaveBeenCalledWith({ type: 'cea:warmed' }, '*');
     expect(h.window.parent.postMessage).toHaveBeenLastCalledWith(ready, '*');
     const later = vi.fn();
     h.window.requestAnimationFrame(later);

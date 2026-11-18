@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore, t
 
 export const MAX_RETAINED_PREVIEWS = 12;
 export const MAX_WARMING_PREVIEWS = 2;
+export const MAX_GPU_CONTEXTS = 6;
 
 export function createActivity() {
   const pending = new Set<symbol>();
@@ -10,13 +11,26 @@ export function createActivity() {
   let retained: readonly string[] = [];
   const warming = new Set<string>();
   const waiting = new Set<string>();
+  const gpu = new Map<string, number>();
+  const active = new Set<string>();
   let warmTimer: ReturnType<typeof setTimeout> | undefined;
   const publish = () => listeners.forEach(listener => listener());
+  const trim = (keep?: string) => {
+    let changed = false;
+    while (retained.length > MAX_RETAINED_PREVIEWS || [...gpu.values()].reduce((sum, count) => sum + count, 0) > MAX_GPU_CONTEXTS) {
+      const oldest = retained.find(id => id !== keep && !active.has(id) && (retained.length > MAX_RETAINED_PREVIEWS || gpu.has(id)));
+      if (!oldest) break;
+      retained = retained.filter(id => id !== oldest);
+      gpu.delete(oldest);
+      warming.delete(oldest);
+      changed = true;
+    }
+    return changed;
+  };
   const retain = (id: string) => {
     if (retained.at(-1) === id) return;
-    const next = [...retained.filter(value => value !== id), id].slice(-MAX_RETAINED_PREVIEWS);
-    for (const previous of retained) if (!next.includes(previous)) warming.delete(previous);
-    retained = next;
+    retained = [...retained.filter(value => value !== id), id];
+    trim(id);
     publish();
   };
   const scheduleWarm = () => {
@@ -51,9 +65,23 @@ export function createActivity() {
       warming.delete(id);
       scheduleWarm();
     },
+    resources(id: string, contexts: number) {
+      if (!retained.includes(id) || !Number.isSafeInteger(contexts) || contexts < 1) return;
+      gpu.set(id, contexts);
+      if (trim(id)) publish();
+      scheduleWarm();
+    },
+    activate(id: string, value: boolean) {
+      if (value) active.add(id);
+      else active.delete(id);
+      if (trim()) publish();
+      scheduleWarm();
+    },
     release(id: string) {
       waiting.delete(id);
       warming.delete(id);
+      gpu.delete(id);
+      active.delete(id);
       scheduleWarm();
       if (!retained.includes(id)) return;
       retained = retained.filter(value => value !== id);
