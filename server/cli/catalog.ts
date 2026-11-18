@@ -4,7 +4,7 @@ import type { AssetQuery, AssetSummary } from '../../shared/types.ts';
 import { Library } from '../library.ts';
 import { libraryStatus, registeredLibraries, resolveCliLibrary, type LibraryTarget } from '../libraryRegistry.ts';
 
-function filePath(lib: Library, relative: string) {
+export function libraryFilePath(lib: Library, relative: string) {
   const candidate = lib.resolve(relative);
   if (!candidate) throw new Error(`资源路径越出素材库：${relative}`);
   const absolute = fs.realpathSync(candidate);
@@ -74,15 +74,15 @@ export function showComponent(id: string, selector?: string, framework?: string,
     const selected = framework ? variants.find(variant => variant.framework === framework) : variants[0];
     if (framework && !selected) throw new Error(`组件没有 ${framework} 实现：${id}`);
     const selectedFiles = lib.repo.listFiles(id).filter(file => file.framework === selected?.framework && file.role !== 'media');
-    if (!metadataOnly) for (const file of selectedFiles) filePath(lib, file.path);
+    if (!metadataOnly) for (const file of selectedFiles) libraryFilePath(lib, file.path);
     return {
       library: target,
       asset: {
         ...asset, tags: lib.repo.getTags(id), texts: lib.repo.getTexts(id),
         frameworks: variants.map(variant => variant.framework),
         variants: metadataOnly ? variants : selected ? [lib.getPlayback(id, selected.framework).variant] : [],
-        media: lib.repo.listFiles(id, 'media').map(file => ({ ...file, absolutePath: filePath(lib, file.path) })),
-        resources: selectedFiles.filter(file => file.role === 'resource').map(file => ({ ...file, absolutePath: filePath(lib, file.path) })),
+        media: lib.repo.listFiles(id, 'media').map(file => ({ ...file, absolutePath: libraryFilePath(lib, file.path) })),
+        resources: selectedFiles.filter(file => file.role === 'resource').map(file => ({ ...file, absolutePath: libraryFilePath(lib, file.path) })),
       },
     };
   } finally { lib.close(); }

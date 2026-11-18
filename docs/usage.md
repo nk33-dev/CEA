@@ -95,6 +95,19 @@ cea show weather-card --library personal --framework vue --json
 
 `show` 默认只读取第一个框架，`--framework` 选择实现。结果保留各语言文案、依赖、入口和预览入口，并提供截图与资源的绝对路径；不把二进制编码到 JSON。支持看图的 AI 可以用宿主的图片读取能力查看截图。`--metadata-only` 只列元数据与文件清单，不读取源码。回收站中的组件不会出现在搜索和 `show` 中。
 
+### 实际阅览
+
+```bash
+cea preview weather-card --library personal --framework vue --json
+cea preview weather-card --library personal --framework vue --serve --json
+```
+
+第一条返回当前实现的截图和四帧动效图的绝对路径，AI 可用图片工具读取。默认采样 1.6 秒、DPR 1，不录屏；`--video` 额外生成 WebM，`--duration` 可设 400–6000 毫秒。`--width` / `--height` 改变真实 CSS 视口，不拉伸截图。默认复用配置目录下的预览缓存，只保留最近 12 个组件实现；`--out` 指定另存位置。
+
+第二条返回仅供本机使用的交互地址，AI 可用浏览器工具实际悬停、点击和切换状态。命令持续运行，默认 120 秒到期，`--ttl` 可设 15–600 秒；关闭命令或到期时结束服务，并卸载已打开页面中的组件。未悬停时预览完成入场后暂停，页面隐藏时暂停。不为了演示替组件添加自动轮播。
+
+同一配置目录一次只允许一个 AI 阅览任务；截图结束自动关闭浏览器和只读服务，实时入口不额外启动浏览器。复用网页相同的打包与沙箱，不暴露管理 API，不修改素材库。截图需要可选依赖 Playwright 与 Chromium，缺少时按错误提示安装，或使用 `--serve`。动画分帧是观察样本，不证明所有中间帧稳定；依赖 WebGPU 等硬件能力的素材仍可能在当前浏览器显示不支持状态，不能据此当作正常效果。
+
 只读命令不会升级数据库。需要升级旧库时，先确认 CLI 有写权限，再执行：
 
 ```bash
@@ -116,6 +129,8 @@ cea export "./exports" weather-card --library personal --json
 新命令的 `--json` 输出包含 `schemaVersion: 1`、`ok` 和对应结果字段。参数或操作失败时输出 `ok: false`、`error.code`、`error.message`，退出码为 1；格式检查失败提供 `valid: false` 和 `problems`。stdout 只包含一个 JSON 值，运行时诊断留在 stderr。为兼容现有脚本，`list --json` 和 `audit --json` 继续返回数组。
 
 ### 给 AI 的使用约定
+
+「导入导出」和「使用说明」中可切换「让 AI 写组件 / 让 AI 使用 CLI」，直接查看、复制短提示词。CLI 提示词带上本机程序位置和网页当前库，让 AI 先运行 `--help`，再按需读取规则；网页库与 CLI 注册授权仍各自独立。更换电脑后重新复制即可。格式页默认展示最小目录，完整规则按章节展开，与 `guide` 命令共用内容。
 
 可以把以下约定放进 AI 工具的用户级指令或 Skill，无需修改每个业务项目：
 

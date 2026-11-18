@@ -6,8 +6,7 @@ import { framework as frameworkInfo } from '../shared/frameworks.ts';
 import { mimeOf, normalizeRelPath } from '../shared/paths.ts';
 import { readTagQuery } from '../shared/search.ts';
 import type { AssetInput, DuplicateStrategy, Variant } from '../shared/types.ts';
-import { bundle } from './bundler.ts';
-import { bundlePlayPage, htmlPlayPage } from './play.ts';
+import { playbackDocument } from './playDocument.ts';
 import { configDir, forgetLibrary, LOCAL_CLI, readConfig, rememberLibrary } from './config.ts';
 import { listDir, makeDir, reveal } from './fsBrowse.ts';
 import { badRequest, HttpError, notFound } from './errors.ts';
@@ -15,7 +14,7 @@ import { Library } from './library.ts';
 import { folderFiles, parseFolderFiles, readFolder, writeFolder, type FolderPackage } from './transfer/folder.ts';
 import { exportLibrary, exportReferencePackage, importPackage, isBackupPackage, parsePackageFiles, previewImport, unzipSafe, type ParsedPackage } from './transfer/zip.ts';
 import { zipSync } from 'fflate';
-import { parseThemeContract, resolveTheme } from '../shared/theme.ts';
+import { parseThemeContract } from '../shared/theme.ts';
 
 export interface AppState {
   lib: Library | null;
@@ -53,15 +52,7 @@ function stamp() {
 
 /** revalidate：地址带内容版本时，浏览器每次先问一下，内容没变就用本地副本（304） */
 async function sendPlay(res: Response, key: string, title: string, variant: Variant, revalidate = false, dependencyRoot?: string) {
-  let html: string;
-  if (variant.framework === 'html') {
-    const moduleEntry = variant.files.find(f => f.path === 'script.mjs' && f.content.trim());
-    const result = moduleEntry ? await bundle('html', key, variant.files, moduleEntry.path, variant.resources, dependencyRoot) : null;
-    html = result?.error ? bundlePlayPage(title, '', result.error) : htmlPlayPage(title, variant.files, { theme: resolveTheme(variant) }, result?.code);
-  } else {
-    const result = await bundle(variant.framework, key, variant.files, variant.previewEntry ?? variant.entry, variant.resources, dependencyRoot);
-    html = bundlePlayPage(title, result.code, result.error, { theme: resolveTheme(variant) });
-  }
+  const html = await playbackDocument(key, title, variant, dependencyRoot);
   res.setHeader('Cache-Control', revalidate ? 'private, no-cache' : 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.type('text/html; charset=utf-8').send(html);
