@@ -51,6 +51,7 @@ function harness(page = false) {
     fonts: { ready: Promise.resolve() },
     body: { children: [] as unknown[] },
     getElementById: () => null,
+    querySelector: vi.fn((): unknown => null),
     getAnimations: () => animations,
     querySelectorAll: () => players,
     addEventListener: (type: string, callback: (event?: { isTrusted: boolean }) => void) => {
@@ -123,6 +124,23 @@ describe('预览播放控制', () => {
     h.frame(32);
     expect(h.window.parent.postMessage).toHaveBeenCalledWith({
       type: 'cea:ready', bounds: { x: 210, y: 130, width: 300, height: 180 },
+      layout: { width: 1000, height: 700, framing: 'content' },
+    }, '*');
+  });
+  it('显式边界保留透明画布，不穿透到内部的小元素', async () => {
+    const h = harness(true);
+    const icon = { tagName: 'SVG', offsetWidth: 20, offsetHeight: 20, offsetLeft: 0, offsetTop: 0, offsetParent: null, matches: () => false };
+    const canvas = {
+      tagName: 'SECTION', offsetWidth: 600, offsetHeight: 460, offsetLeft: 0, offsetTop: 0, offsetParent: null,
+      matches: () => false, children: [icon],
+    };
+    h.document.querySelector.mockReturnValue({ getAttribute: () => 'children', children: [canvas] });
+    h.listeners.get('DOMContentLoaded')?.();
+    await Promise.resolve();
+    h.frame(16);
+    h.frame(32);
+    expect(h.window.parent.postMessage).toHaveBeenCalledWith({
+      type: 'cea:ready', bounds: { x: 0, y: 0, width: 600, height: 460 },
       layout: { width: 1000, height: 700, framing: 'content' },
     }, '*');
   });

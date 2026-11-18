@@ -70,6 +70,7 @@ body{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr);place-ite
 font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;-webkit-font-smoothing:antialiased}
 /* 组件取景由宿主居中；内部高度变化时保持顶部锚点，避免两层居中异步抵消。 */
 :where(html[data-framing="content"]) body,:where(html[data-framing="content"]) #root{align-items:start}
+:where(html[data-framing="content"]) body:has([data-preview-bounds]){padding:0}
 :where(html[data-framing="device"]) body{padding:0;display:block}
 :where(html[data-framing="device"]) #root{display:block}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:240ms;animation-timing-function:ease}
@@ -164,8 +165,9 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   }
   function contentBounds(){
     var root=document.getElementById('root');
-    var items=visibleChildren(root||document.body);
-    for(var depth=0;depth<4&&items.length===1&&plain(items[0]);depth++){
+    var declared=document.querySelector('[data-preview-bounds]');
+    var items=declared?(declared.getAttribute('data-preview-bounds')==='children'?visibleChildren(declared):[declared]):visibleChildren(root||document.body);
+    for(var depth=0;!declared&&depth<4&&items.length===1&&plain(items[0]);depth++){
       var inner=visibleChildren(items[0]);
       if(!inner.length)break;
       items=inner;
@@ -267,7 +269,7 @@ function stageHead(options?: StageOptions) {
   return STAGE_HEAD.replace('/*__CEA_THEME__*/', JSON.stringify(options?.theme ?? { mode: 'legacy', default: 'light' }));
 }
 
-export function htmlPlayPage(title: string, code: CodeFile[], options?: StageOptions): string {
+export function htmlPlayPage(title: string, code: CodeFile[], options?: StageOptions, moduleCode = ''): string {
   const get = (p: string) => code.find(f => f.path === p)?.content ?? '';
   const style = get('style.css');
   const script = get('script.js');
@@ -283,6 +285,7 @@ ${style}
 <body>
 ${get('markup.html')}
 ${script.trim() ? `<script>\n${escapeScript(script)}\n</script>` : ''}
+${moduleCode ? `<script>\n${escapeScript(moduleCode)}\n</script>` : ''}
 </body>
 </html>
 `;

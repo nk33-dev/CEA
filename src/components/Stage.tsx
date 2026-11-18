@@ -134,7 +134,8 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
     <iframe
       ref={ref}
       className={`stage-frame${loaded ? ' is-loaded' : ''}${className ? ' ' + className : ''}`}
-      title={uiText("{{value0}} 预览", {value0: title})}
+      title=""
+      aria-label={uiText("{{value0}} 预览", {value0: title})}
       sandbox={SANDBOX}
       src={src}
       onLoad={() => {

@@ -15,6 +15,7 @@ import { FitStage, useInView } from './Stage.tsx';
 import { localizedTitle, translatedValue } from '../../shared/contentLocale.ts';
 import { preloadDetailPage } from '../lib/detailRoute.ts';
 import { useRetainedPreview } from './PreviewActivity.tsx';
+import { previewKind, previewScale } from '../../shared/preview.ts';
 
 interface CardProps {
   asset: AssetSummary;
@@ -85,7 +86,9 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
         onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setHovered(true); setPaused(false); } }}
         onPointerLeave={() => { leaveTimer.current = setTimeout(() => setHovered(false), 180); }}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
-        {asset.cover && !coverFailed && <img className="card-cover" src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
+        {asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
+          style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
+          src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
         {mounted && <FitStage assetId={asset.id} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
           active={active} onResume={resume} reloadKey={replay} />}
         {selecting ? (
