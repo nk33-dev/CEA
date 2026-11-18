@@ -21,6 +21,7 @@ interface AssetRow {
   preview_viewport: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
 
 export interface AssetRecord {
@@ -36,11 +37,13 @@ export interface AssetRecord {
   previewViewport?: PreviewViewport | null;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 }
 
 export interface VariantRecord {
   framework: string;
   entry: string;
+  previewEntry?: string;
   dependencies: Record<string, string>;
   supportsDarkMode?: boolean;
   theme?: ThemeContract | null;
@@ -69,6 +72,7 @@ function toRecord(row: AssetRow): AssetRecord {
     ...(row.preview_viewport ? { previewViewport: previewViewport(JSON.parse(row.preview_viewport)) } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...(row.deleted_at ? { deletedAt: row.deleted_at } : {}),
   };
 }
 
@@ -97,7 +101,7 @@ export class Repository {
     if (ids && !ids.length) return [];
     const own = ids ? ` where asset_id in (${ids.map(() => '?').join(',')})` : '';
     const args = ids ?? [];
-    const rows = this.db.prepare(`select * from assets${ids ? ` where id in (${ids.map(() => '?').join(',')})` : ''} order by updated_at desc`).all(...args) as unknown as AssetRow[];
+    const rows = this.db.prepare(`select * from assets${ids ? ` where id in (${ids.map(() => '?').join(',')})` : ' where deleted_at is null'} order by updated_at desc`).all(...args) as unknown as AssetRow[];
     const tags = this.groupBy<{ asset_id: string; name: string }>(
       `select at.asset_id, t.name from asset_tags at join tags t on t.id = at.tag_id${own} order by at.position`, r => r.name, args);
     const frameworks = this.groupBy<{ asset_id: string; framework: string }>(
@@ -137,7 +141,7 @@ export class Repository {
     const page = Math.max(1, Math.floor(query.page ?? 1));
     const limit = Math.min(60, Math.max(1, Math.floor(query.limit ?? 24)));
     const match = (() => {
-      const clauses: string[] = [];
+      const clauses: string[] = [query.trash ? 'a.deleted_at is not null' : 'a.deleted_at is null'];
       const args: (string | number)[] = [];
       for (const term of (query.q ?? '').slice(0, 200).trim().toLowerCase().split(/\s+/).filter(Boolean)) {
         clauses.push(`(
@@ -175,7 +179,7 @@ export class Repository {
     const category = where('category');
     const framework = where('framework');
     const favorite = where('favorite');
-    const order = query.sort === 'title' ? 'a.title collate nocase, a.id' : query.sort === 'created' ? 'a.created_at desc, a.id' : 'a.updated_at desc, a.id';
+    const order = query.sort === 'title' ? 'a.title collate nocase, a.id' : query.trash ? 'a.deleted_at desc, a.id' : query.sort === 'created' ? 'a.created_at desc, a.id' : 'a.updated_at desc, a.id';
     // 长文匹配只执行一次，分页和各筛选计数共用结果，避免每个计数重新扫描思路文本。
     const result = this.db.prepare(`
       with matched as materialized (select a.* from assets a${match.sql}),
@@ -220,8 +224,8 @@ export class Repository {
     return row ? toRecord(row) : null;
   }
 
-  allAssetIds(): string[] {
-    return (this.db.prepare('select id from assets order by created_at').all() as { id: string }[]).map(r => r.id);
+  allAssetIds(includeDeleted = false): string[] {
+    return (this.db.prepare(`select id from assets${includeDeleted ? '' : ' where deleted_at is null'} order by created_at`).all() as { id: string }[]).map(r => r.id);
   }
 
   insertAsset(a: AssetRecord) {
@@ -256,8 +260,12 @@ export class Repository {
     return changed;
   }
 
-  countAssets(): number {
-    return (this.db.prepare('select count(*) n from assets').get() as { n: number }).n;
+  setDeletedAt(id: string, deletedAt: string | null) {
+    this.db.prepare('update assets set deleted_at=? where id=?').run(deletedAt, id);
+  }
+
+  countAssets(trash = false): number {
+    return (this.db.prepare(`select count(*) n from assets where deleted_at is ${trash ? 'not ' : ''}null`).get() as { n: number }).n;
   }
 
   // ---- 文案 ----
@@ -278,14 +286,14 @@ export class Repository {
   // ---- 实现 ----
 
   getVariants(assetId: string): VariantRecord[] {
-    const rows = this.db.prepare('select framework, entry, dependencies, supports_dark_mode, theme from variants where asset_id = ? order by sort, framework').all(assetId) as { framework: string; entry: string; dependencies: string; supports_dark_mode: number; theme: string | null }[];
-    return rows.map(r => ({ framework: r.framework, entry: r.entry, dependencies: JSON.parse(r.dependencies || '{}'), ...(r.supports_dark_mode ? { supportsDarkMode: true } : {}), ...(r.theme ? { theme: parseThemeContract(JSON.parse(r.theme)) } : {}) }));
+    const rows = this.db.prepare('select framework, entry, preview_entry, dependencies, supports_dark_mode, theme from variants where asset_id = ? order by sort, framework').all(assetId) as { framework: string; entry: string; preview_entry: string | null; dependencies: string; supports_dark_mode: number; theme: string | null }[];
+    return rows.map(r => ({ framework: r.framework, entry: r.entry, ...(r.preview_entry ? { previewEntry: r.preview_entry } : {}), dependencies: JSON.parse(r.dependencies || '{}'), ...(r.supports_dark_mode ? { supportsDarkMode: true } : {}), ...(r.theme ? { theme: parseThemeContract(JSON.parse(r.theme)) } : {}) }));
   }
 
   setVariants(assetId: string, variants: VariantRecord[]) {
     this.db.prepare('delete from variants where asset_id = ?').run(assetId);
-    const insert = this.db.prepare('insert into variants(asset_id, framework, entry, dependencies, sort, supports_dark_mode, theme) values (?, ?, ?, ?, ?, ?, ?)');
-    variants.forEach((v, i) => insert.run(assetId, v.framework, v.entry, JSON.stringify(v.dependencies), i, v.supportsDarkMode === true ? 1 : 0, v.theme ? JSON.stringify(v.theme) : null));
+    const insert = this.db.prepare('insert into variants(asset_id, framework, entry, dependencies, sort, supports_dark_mode, theme, preview_entry) values (?, ?, ?, ?, ?, ?, ?, ?)');
+    variants.forEach((v, i) => insert.run(assetId, v.framework, v.entry, JSON.stringify(v.dependencies), i, v.supportsDarkMode === true ? 1 : 0, v.theme ? JSON.stringify(v.theme) : null, v.previewEntry ?? null));
   }
 
   // ---- 标签 ----
@@ -313,7 +321,8 @@ export class Repository {
   }
 
   listTags(): TagCount[] {
-    const rows = this.db.prepare(`select t.name, t.labels, count(*) count from tags t join asset_tags at on at.tag_id = t.id
+    const rows = this.db.prepare(`select t.name, t.labels, sum(case when a.deleted_at is null then 1 else 0 end) count from tags t join asset_tags at on at.tag_id = t.id
+      join assets a on a.id=at.asset_id
       group by t.id order by count desc, t.name collate nocase`).all() as unknown as (TagCount & { labels: string })[];
     return rows.map(({ labels, ...row }) => ({ ...row, ...(labels !== '{}' ? { labels: JSON.parse(labels) } : {}) }));
   }
@@ -352,7 +361,7 @@ export class Repository {
 
   listCategories(): Category[] {
     const rows = this.db.prepare(`select c.id, c.name, c.sort, c.labels, count(a.id) count from categories c
-      left join assets a on a.category_id = c.id group by c.id order by c.sort, c.name collate nocase`).all() as unknown as (Category & { labels: string })[];
+      left join assets a on a.category_id = c.id and a.deleted_at is null group by c.id order by c.sort, c.name collate nocase`).all() as unknown as (Category & { labels: string })[];
     return rows.map(({ labels, ...row }) => ({ ...row, ...(labels !== '{}' ? { labels: JSON.parse(labels) } : {}) }));
   }
 
@@ -396,7 +405,7 @@ export class Repository {
   }
 
   replaceCodeFiles(assetId: string, files: FileRecord[]) {
-    this.db.prepare(`delete from files where asset_id = ? and role = 'code'`).run(assetId);
+    this.db.prepare(`delete from files where asset_id = ? and role in ('code', 'resource')`).run(assetId);
     for (const f of files) this.addFile(assetId, f);
   }
 

@@ -7,6 +7,11 @@ export const en: LocaleInfo = {
   demoOnly: 'Controls marked data-demo-only exist only for the asset preview. When integrating, remove only those controls, their dedicated styles and their manual-selection handlers. Fully preserve every business state, intensity level, rendering path, animation and business interaction, and trigger them from project data.',
   sections: { markup: 'Markup', style: 'Styles', script: 'Script (runs once after the markup)' },
   dependencies: 'Dependencies',
+  previewExample: (entry, preview) => `The reusable component entry is ${entry}. ${preview} supplies example data, usage and preview layout. Integrate the component with project data while preserving its capabilities.`,
+  resources: {
+    title: 'Resource files',
+    instruction: 'These resources are included in the reference package. Keep their relative paths and use the original files; binary contents are not included in this prompt. If attachments are missing, request them instead of inventing images or substituting remote URLs.',
+  },
   theme: {
     labels: { original: 'Original colors', light: 'Light only', dark: 'Dark only', both: 'Light and dark' },
     goals: {

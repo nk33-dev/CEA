@@ -7,6 +7,11 @@ export const zh: LocaleInfo = {
   demoOnly: '源码中 data-demo-only 标记的控件仅用于素材预览演示。接入项目时仅移除这些控件及其专用样式和手动选值事件。完整保留所有业务状态、强度档位及对应的渲染逻辑、动效和业务交互，改由项目业务数据触发。',
   sections: { markup: '结构', style: '样式', script: '脚本（在结构之后运行一次）' },
   dependencies: '依赖',
+  previewExample: (entry, preview) => `组件入口是 ${entry}。${preview} 提供运行示例、示例数据和预览布局；接入时按项目业务传入参数，保留原组件的能力。`,
+  resources: {
+    title: '资源文件',
+    instruction: '以下资源随参考包提供，请保持相对路径并使用原文件；本提示词不包含二进制内容。未收到附件时先索取资源，不要编造图片或替换成外链。',
+  },
   theme: {
     labels: { original: '原始配色', light: '仅浅色', dark: '仅深色', both: '浅色与深色' },
     goals: {

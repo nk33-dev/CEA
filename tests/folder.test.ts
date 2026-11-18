@@ -144,7 +144,8 @@ describe('asset.json 注释与暗色识别', () => {
   it('指南区分思路与带代码的复刻，并说明实现目录和格式检查边界', () => {
     const guide = folderGuide();
     expect(guide).toContain('思路：只描述效果，不含代码');
-    expect(guide).toContain('复刻：集成要求 + 选中框架的完整代码');
+    expect(guide).toContain('复刻：集成要求、依赖、资源清单和选中框架的源码');
+    expect(guide).toContain('二进制资源随参考包交付');
     expect(guide).toContain('不会自动附上参考代码');
     expect(guide).toContain('每种实现只读取自己的框架目录');
     expect(guide).toContain('不编译代码，也不验证实际运行效果');

@@ -12,6 +12,8 @@ export interface LocaleInfo {
   demoOnly: string;
   sections: { markup: string; style: string; script: string };
   dependencies: string;
+  resources: { title: string; instruction: string };
+  previewExample: (entry: string, preview: string) => string;
   theme: {
     labels: Record<ThemeName, string>;
     goals: Record<Exclude<ThemeName, 'original'>, string>;

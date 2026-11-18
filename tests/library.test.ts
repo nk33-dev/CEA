@@ -189,6 +189,9 @@ describe('素材库', () => {
     expect(fs.existsSync(path.join(lib.root, 'assets', a.id, 'code', 'html', 'extra.svg'))).toBe(false);
     expect(fs.existsSync(path.join(lib.root, 'assets', a.id, 'code', 'react'))).toBe(false);
     lib.deleteAsset(a.id);
+    expect(fs.existsSync(path.join(lib.root, 'assets', a.id))).toBe(true);
+    expect(lib.listAssets()).toHaveLength(0);
+    lib.manageAssets([a.id], 'purge');
     expect(fs.existsSync(path.join(lib.root, 'assets', a.id))).toBe(false);
   });
 
@@ -202,6 +205,40 @@ describe('素材库', () => {
     expect(() => lib.createAsset(input({ variants: [html(), html()] }))).toThrow(/重复/);
     expect(() => lib.createAsset(input({ texts: { 'invalid_locale!': { summary: 'x', idea: '' } } }))).toThrow(/语言代码无效/);
     expect(() => lib.createAsset(input({ variants: [] }))).toThrow(/至少需要一种实现/);
+  });
+
+  it('回收站保留文件与关联，恢复后可用，永久删除只接受已回收的组件', () => {
+    const lib = open(tempDir());
+    const category = lib.createCategory('Cards');
+    const asset = lib.createAsset(input({ categoryId: category.id }));
+    const media = lib.addMedia(asset.id, 'cover.png', PNG);
+    const code = lib.getAsset(asset.id).variants[0].files;
+    expect(() => lib.manageAssets([asset.id], 'purge')).toThrow(/回收站/);
+    lib.deleteAsset(asset.id);
+    const deletedAt = lib.getAsset(asset.id).deletedAt;
+    expect(deletedAt).toBeTruthy();
+    lib.deleteAsset(asset.id);
+    expect(lib.getAsset(asset.id).deletedAt).toBe(deletedAt);
+    expect(lib.repo.searchAssets({}).total).toBe(0);
+    expect(lib.repo.searchAssets({ trash: true, q: asset.title }).items[0].id).toBe(asset.id);
+    expect(lib.listCategories()[0].count).toBe(0);
+    expect(fs.existsSync(lib.resolve(media.cover!)!)).toBe(true);
+    expect(() => lib.updateAsset(asset.id, input())).toThrow(/恢复/);
+    for (const pkg of [parsePackage(exportLibrary(lib)), parseFolderFiles(folderFiles(lib))]) {
+      const target = open(tempDir());
+      importPackage(target, pkg, 'skip');
+      expect(target.repo.countAssets()).toBe(0);
+      expect(target.repo.countAssets(true)).toBe(1);
+      expect(target.getAsset(asset.id).deletedAt).toBe(deletedAt);
+      lib.manageAssets([asset.id], 'restore');
+      expect(lib.getAsset(asset.id).variants[0].files).toEqual(code);
+      expect(lib.getAsset(asset.id).tags).toEqual(asset.tags);
+      expect(lib.listCategories()[0].count).toBe(1);
+      lib.deleteAsset(asset.id);
+    }
+    lib.manageAssets([asset.id], 'purge');
+    expect(lib.repo.getAsset(asset.id)).toBeNull();
+    expect(fs.existsSync(path.join(lib.root, 'assets', asset.id))).toBe(false);
   });
 
   it('素材 ID 根据名称生成，可读且唯一', () => {

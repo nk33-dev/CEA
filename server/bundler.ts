@@ -3,7 +3,9 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { compileScript, compileStyle, parse } from '@vue/compiler-sfc';
 import { rolldown, type Plugin } from 'rolldown';
-import type { CodeFile } from '../shared/types.ts';
+import postcss from 'postcss';
+import valueParser from 'postcss-value-parser';
+import type { CodeFile, ResourceFile } from '../shared/types.ts';
 import { normalizeRelPath } from '../shared/paths.ts';
 
 /**
@@ -17,6 +19,7 @@ const ENTRY_ID = '\0cea-entry.tsx';
 const EXTENSIONS = ['', '.tsx', '.ts', '.jsx', '.js', '.vue', '/index.tsx', '/index.ts', '/index.jsx', '/index.js'];
 
 const MOUNT: Record<string, (entry: string) => string> = {
+  html: entry => `import ${JSON.stringify(entry)};`,
   react: entry => [
     "import { createRoot } from 'react-dom/client';",
     `import App from ${JSON.stringify(entry)};`,
@@ -43,7 +46,7 @@ const inFlight = new Map<string, Promise<BundleResult>>();
 
 const injectCss = (css: string) => `{const s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.append(s);}`;
 
-function compileVue(id: string, source: string) {
+function compileVue(id: string, source: string, resources: Set<string>) {
   const { descriptor, errors } = parse(source, { filename: id });
   if (errors.length) throw new Error(`${id}: ${errors[0].message}`);
   const scopeId = 'data-v-' + Buffer.from(id).toString('hex').slice(-8);
@@ -54,7 +57,7 @@ function compileVue(id: string, source: string) {
   const css = descriptor.styles.map(s => {
     const out = compileStyle({ source: s.content, filename: id, id: scopeId, scoped: s.scoped });
     if (out.errors.length) throw new Error(`${id}: ${out.errors[0].message}`);
-    return out.code;
+    return cssResources(out.code, id, resources);
   }).join('\n');
   const body = script
     ? script.content.replace(/export default/, 'const __sfc =')
@@ -65,40 +68,65 @@ function compileVue(id: string, source: string) {
   };
 }
 
-function virtualFiles(framework: string, code: CodeFile[], entry: string): Plugin {
+function cssResources(css: string, id: string, resources: Set<string>) {
+  const root = postcss.parse(css, { from: id });
+  root.walkDecls(decl => {
+    const parsed = valueParser(decl.value);
+    parsed.walk(node => {
+      if (node.type !== 'function' || node.value.toLowerCase() !== 'url') return;
+      const child = node.nodes[0];
+      if (!child || !['word', 'string'].includes(child.type)) return;
+      const value = child.value;
+      if (/^(?:[a-z]+:|\/|#)/i.test(value)) return;
+      const url = new URL(value, 'https://cea.invalid' + id);
+      const clean = decodeURIComponent(url.pathname);
+      if (resources.has(clean)) {
+        child.value = '.' + url.pathname + url.search + url.hash;
+      }
+    });
+    decl.value = parsed.toString();
+  });
+  return root.toString();
+}
+
+function virtualFiles(framework: string, code: CodeFile[], entry: string, resourceFiles: ResourceFile[], dependencyRoot?: string): Plugin {
   const files = new Map(code.map(f => ['/' + f.path, f.content]));
+  const resources = new Set(resourceFiles.map(f => '/' + f.path));
   return {
     name: 'cea-virtual-files',
-    resolveId(source, importer) {
+    async resolveId(source, importer) {
       if (source === ENTRY_ID) return source;
       if (source.startsWith('.') || source.startsWith('/')) {
         const from = importer && importer !== ENTRY_ID ? path.posix.dirname(importer) : '/';
         const base = source.startsWith('/') ? source : path.posix.join(from, source);
         const clean = normalizeRelPath(base);
         if (clean === null) return null;
-        for (const ext of EXTENSIONS) if (files.has('/' + clean + ext)) return '/' + clean + ext;
+        for (const ext of EXTENSIONS) if (files.has('/' + clean + ext) || resources.has('/' + clean + ext)) return '/' + clean + ext;
         return null;
       }
-      return this.resolve(source, path.join(PROJECT_ROOT, 'package.json'), { skipSelf: true });
+      if (/^(react|react-dom|vue)(\/|$)/.test(source)) return this.resolve(source, path.join(PROJECT_ROOT, 'package.json'), { skipSelf: true });
+      const external = dependencyRoot && await this.resolve(source, path.join(dependencyRoot, 'package.json'), { skipSelf: true });
+      return external || this.resolve(source, path.join(PROJECT_ROOT, 'package.json'), { skipSelf: true });
     },
     load(id) {
       if (id === ENTRY_ID) return MOUNT[framework]('/' + entry);
+      if (resources.has(id)) return { code: `export default ${JSON.stringify('.' + id.split('/').map(encodeURIComponent).join('/'))};`, moduleType: 'js' };
       const content = files.get(id);
       if (content === undefined) return null;
-      if (id.endsWith('.css')) return { code: injectCss(content), moduleType: 'js' };
-      if (id.endsWith('.vue')) return compileVue(id, content);
+      if (id.endsWith('.css')) return { code: injectCss(cssResources(content, id, resources)), moduleType: 'js' };
+      if (id.endsWith('.vue')) return compileVue(id, content, resources);
       return content;
     },
   };
 }
 
-export function bundle(framework: string, _key: string, code: CodeFile[], entry: string): Promise<BundleResult> {
-  const key = createHash('sha256').update(JSON.stringify([framework, entry, code])).digest('hex');
+export function bundle(framework: string, _key: string, code: CodeFile[], entry: string, resources: ResourceFile[] = [], dependencyRoot?: string): Promise<BundleResult> {
+  const key = createHash('sha256').update(JSON.stringify([framework, entry, code, resources.map(f => f.path), dependencyRoot])).digest('hex');
   const hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
   const pending = inFlight.get(key);
   if (pending) return pending;
-  const task = compileBundle(framework, code, entry).then(result => {
+  const task = compileBundle(framework, code, entry, resources, dependencyRoot).then(result => {
     if (!result.error) cache.set(key, result);
     if (cache.size > 50) cache.delete(cache.keys().next().value!);
     return result;
@@ -107,7 +135,7 @@ export function bundle(framework: string, _key: string, code: CodeFile[], entry:
   return task;
 }
 
-async function compileBundle(framework: string, code: CodeFile[], entry: string): Promise<BundleResult> {
+async function compileBundle(framework: string, code: CodeFile[], entry: string, resources: ResourceFile[], dependencyRoot?: string): Promise<BundleResult> {
   let result: BundleResult;
   let build: Awaited<ReturnType<typeof rolldown>> | undefined;
   try {
@@ -126,7 +154,7 @@ async function compileBundle(framework: string, code: CodeFile[], entry: string)
           __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false',
         },
       },
-      plugins: [virtualFiles(framework, code, entry)],
+      plugins: [virtualFiles(framework, code, entry, resources, dependencyRoot)],
       onLog(level, log) {
         if (level === 'warn' && log.code === 'UNRESOLVED_IMPORT') throw new Error(log.message);
       },

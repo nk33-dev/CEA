@@ -13,7 +13,7 @@ export const ASSET_TYPES = [
 ] as const;
 export type AssetType = (typeof ASSET_TYPES)[number]['id'];
 
-export type FileRole = 'code' | 'media';
+export type FileRole = 'code' | 'media' | 'resource';
 
 export interface Category {
   id: string;
@@ -45,6 +45,13 @@ export interface CodeFile {
   content: string;
 }
 
+/** 实现目录内的图片、字体等附件。详情只传清单，不把二进制读成源码。 */
+export interface ResourceFile {
+  path: string;
+  mime: string;
+  size: number;
+}
+
 /** 某个语言下的文案 */
 export interface AssetText {
   title?: string;
@@ -59,10 +66,12 @@ export interface AssetText {
 export interface Variant {
   framework: string;
   entry: string;
+  previewEntry?: string;
   dependencies: Record<string, string>;
   supportsDarkMode?: boolean;
   theme?: ThemeContract | null;
   files: CodeFile[];
+  resources?: ResourceFile[];
 }
 
 export interface AssetSummary {
@@ -87,6 +96,7 @@ export interface AssetSummary {
   searchText: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 }
 
 export interface AssetDetail extends Omit<AssetSummary, 'summaries' | 'searchText'> {
@@ -116,6 +126,7 @@ export interface LibraryInfo {
   libraryId: string;
   schemaVersion: number;
   assetCount: number;
+  trashCount?: number;
   /** 最近打开过的其他素材库，最新的在前 */
   recent?: { path: string; available: boolean }[];
   /** 程序配置所在目录 */
@@ -135,6 +146,7 @@ export interface DirListing {
 }
 
 export interface AssetQuery {
+  trash?: boolean;
   q?: string;
   category?: string;
   framework?: string;

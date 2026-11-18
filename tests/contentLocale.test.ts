@@ -64,7 +64,7 @@ describe('内容语言', () => {
     lib.close();
     libraries.pop();
     const db = new DatabaseSync(path.join(lib.root, 'library.db'));
-    db.exec("alter table variants drop column theme; alter table asset_texts drop column theme_ideas; alter table asset_texts drop column title; alter table tags drop column labels; alter table categories drop column labels; update meta set value='5' where key='schema_version'");
+    db.exec("drop index assets_deleted; alter table assets drop column deleted_at; alter table variants drop column preview_entry; alter table variants drop column theme; alter table asset_texts drop column theme_ideas; alter table asset_texts drop column title; alter table tags drop column labels; alter table categories drop column labels; update meta set value='5' where key='schema_version'");
     migrate(db, lib.root);
     expect(db.prepare('select title from asset_texts').all()).toEqual([{ title: '' }, { title: '' }]);
     db.close();

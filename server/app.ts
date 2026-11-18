@@ -52,12 +52,14 @@ function stamp() {
 }
 
 /** revalidate：地址带内容版本时，浏览器每次先问一下，内容没变就用本地副本（304） */
-async function sendPlay(res: Response, key: string, title: string, variant: Variant, revalidate = false) {
+async function sendPlay(res: Response, key: string, title: string, variant: Variant, revalidate = false, dependencyRoot?: string) {
   let html: string;
   if (variant.framework === 'html') {
-    html = htmlPlayPage(title, variant.files, { theme: resolveTheme(variant) });
+    const moduleEntry = variant.files.find(f => f.path === 'script.mjs' && f.content.trim());
+    const result = moduleEntry ? await bundle('html', key, variant.files, moduleEntry.path, variant.resources, dependencyRoot) : null;
+    html = result?.error ? bundlePlayPage(title, '', result.error) : htmlPlayPage(title, variant.files, { theme: resolveTheme(variant) }, result?.code);
   } else {
-    const result = await bundle(variant.framework, key, variant.files, variant.entry);
+    const result = await bundle(variant.framework, key, variant.files, variant.previewEntry ?? variant.entry, variant.resources, dependencyRoot);
     html = bundlePlayPage(title, result.code, result.error, { theme: resolveTheme(variant) });
   }
   res.setHeader('Cache-Control', revalidate ? 'private, no-cache' : 'no-store');
@@ -169,6 +171,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
       framework: String(req.query.fw ?? ''),
       tags,
       favorite: req.query.fav === '1',
+      trash: req.query.trash === '1',
       sort: req.query.sort === 'title' ? 'title' : req.query.sort === 'created' ? 'created' : 'updated',
       page: num(req.query.page, 1), limit: num(req.query.limit, 24),
     }));
@@ -179,7 +182,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   }));
   app.post('/api/assets/batch', json, asyncRoute((req, res) => {
     if (!Array.isArray(req.body?.ids) || !req.body.ids.every((id: unknown) => typeof id === 'string')) throw badRequest('请选择组件');
-    if (!['delete', 'tag', 'untag', 'category'].includes(req.body.action)) throw badRequest('不支持的批量操作');
+    if (!['delete', 'restore', 'purge', 'tag', 'untag', 'category'].includes(req.body.action)) throw badRequest('不支持的批量操作');
     res.json(state.lib.manageAssets(req.body.ids, req.body.action, String(req.body.value ?? '')));
   }));
 
@@ -358,13 +361,21 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
 
   // 统一播放地址：/play/<id>/<framework>/；不写框架时播放第一个实现
   const playSaved = asyncRoute(async (req, res) => {
-    const { asset, variant } = state.lib.getPlayback(param(req, 'id'), req.params.framework ? param(req, 'framework') : undefined);
+    if (!req.params.framework) {
+      const first = state.lib.repo.getVariants(param(req, 'id'))[0];
+      if (!first) throw notFound('这个素材没有该框架的实现');
+      const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+      res.setHeader('Cache-Control', 'no-store');
+      res.redirect(307, `/play/${param(req, 'id')}/${first.framework}/${query}`);
+      return;
+    }
+    const { asset, variant } = state.lib.getPlayback(param(req, 'id'), param(req, 'framework'));
     const fw = variant.framework;
-    await sendPlay(res, `${asset.id}:${fw}:${asset.updatedAt}`, asset.title, variant, typeof req.query.v === 'string');
+    await sendPlay(res, `${asset.id}:${fw}:${asset.updatedAt}`, asset.title, variant, typeof req.query.v === 'string', path.join(state.lib.root, '.runtime'));
   });
 
   // 编辑页的草稿预览：先 POST 代码拿到一次性地址，再在 iframe 里打开
-  const drafts = new Map<string, { title: string; variant: Variant; at: number }>();
+  const drafts = new Map<string, { title: string; variant: Variant; resourceAssetId?: string; at: number }>();
   app.post('/api/play/draft', json, asyncRoute((req, res) => {
     const info = frameworkInfo(String(req.body?.framework ?? ''));
     if (!info) throw badRequest('不支持的框架');
@@ -380,7 +391,12 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
     for (const [k, v] of drafts) if (v.at < cutoff) drafts.delete(k);
     let theme: Variant['theme'];
     try { theme = parseThemeContract(req.body?.theme); } catch (e) { throw badRequest((e as Error).message); }
-    drafts.set(token, { title: String(req.body?.title ?? '草稿'), variant: { framework: info.id, entry, dependencies: {}, files, ...(theme ? { theme } : {}) }, at: Date.now() });
+    const resourceAssetId = typeof req.body?.assetId === 'string' ? req.body.assetId : undefined;
+    const saved = resourceAssetId && state.lib.repo.getVariants(resourceAssetId).some(v => v.framework === info.id)
+      ? state.lib.getPlayback(resourceAssetId, info.id).variant : undefined;
+    const previewEntry = Object.hasOwn(req.body, 'previewEntry') ? normalizeRelPath(String(req.body.previewEntry ?? '')) ?? undefined : saved?.previewEntry;
+    drafts.set(token, { title: String(req.body?.title ?? '草稿'), resourceAssetId,
+      variant: { framework: info.id, entry, ...(previewEntry ? { previewEntry } : {}), dependencies: {}, files, ...(saved?.resources?.length ? { resources: saved.resources } : {}), ...(theme ? { theme } : {}) }, at: Date.now() });
     res.json({ url: `/play/~draft/${token}/` });
   }));
   app.get('/play/~draft/:token', asyncRoute(async (req, res) => {
@@ -389,7 +405,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
       res.status(404).type('text/plain').send('草稿预览已过期');
       return;
     }
-    await sendPlay(res, 'draft:' + param(req, 'token'), draft.title, draft.variant);
+    await sendPlay(res, 'draft:' + param(req, 'token'), draft.title, draft.variant, false, path.join(state.lib.root, '.runtime'));
   }));
   const sendResource = (res: Response, variant: Variant, resource: string) => {
     const clean = normalizeRelPath(resource);
@@ -404,14 +420,24 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   app.get('/play/~draft/:token/*resource', asyncRoute((req, res) => {
     const draft = drafts.get(param(req, 'token'));
     if (!draft) throw notFound('草稿预览已过期');
-    sendResource(res, draft.variant, param(req, 'resource'));
+    const resource = param(req, 'resource');
+    if (draft.resourceAssetId && draft.variant.resources?.some(f => f.path === resource)) {
+      const file = state.lib.getPlaybackFile(draft.resourceAssetId, draft.variant.framework, resource);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'private, no-cache');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.type(withCharset(file.mime)).sendFile(file.abs);
+    } else sendResource(res, draft.variant, resource);
   }));
   // 草稿地址先注册，免得 ~draft 被当成素材 ID
   app.get('/play/:id/', playSaved);
   app.get('/play/:id/:framework/', playSaved);
   app.get('/play/:id/:framework/*resource', asyncRoute((req, res) => {
-    const { variant } = state.lib.getPlayback(param(req, 'id'), param(req, 'framework'));
-    sendResource(res, variant, param(req, 'resource'));
+    const file = state.lib.getPlaybackFile(param(req, 'id'), param(req, 'framework'), param(req, 'resource'));
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.type(withCharset(file.mime)).sendFile(file.abs);
   }));
 
   app.use('/api', (_req, res) => {

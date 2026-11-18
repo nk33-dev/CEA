@@ -9,7 +9,7 @@ import { cliCommand, folderGuide } from '../../shared/folderGuide.ts';
 import { normalizeLocale } from '../../shared/locales.ts';
 import { splitHtml } from '../../shared/html.ts';
 export { splitHtml } from '../../shared/html.ts';
-import { ASSET_ID_PATTERN, extOf, isImage, isVideo, mimeOf, normalizeRelPath, slugify } from '../../shared/paths.ts';
+import { ASSET_ID_PATTERN, extOf, isImage, isResourcePath, isVideo, mimeOf, normalizeRelPath, slugify } from '../../shared/paths.ts';
 import type { AssetText, Variant } from '../../shared/types.ts';
 import { previewScale, previewViewport, type PreviewViewport } from '../../shared/preview.ts';
 import { LOCAL_CLI } from '../config.ts';
@@ -110,12 +110,14 @@ interface AssetJson {
   themes?: Record<string, ThemeContract>;
   themeIdeas?: Record<string, unknown>;
   entry?: Record<string, string>;
+  previewEntry?: Record<string, string>;
   dependencies?: Record<string, Record<string, string>>;
   sourceUrl?: string;
   sourceName?: string;
   favorite?: boolean;
   cover?: string;
   previewScale?: number;
+  deletedAt?: string;
   previewViewport?: PreviewViewport | null;
 }
 
@@ -166,12 +168,16 @@ function parseAssetFolder(name: string, input: Files, prefix: string): ParsedAss
   const text = (rel: string) => strFromU8(files[rel]).replace(/^\uFEFF/, '');
   const variants: Variant[] = [];
   const paths = Object.keys(files);
+  const readResources = (own: string[], dir = '') => own.filter(isResourcePath).map(p => ({
+    path: p.slice(dir.length), mime: mimeOf(p), size: files[p].byteLength,
+  }));
 
   for (const info of FRAMEWORKS) {
     const dir = `${info.id}/`;
     const own = paths.filter(p => p.startsWith(dir) && p !== `${dir}package.json`);
     if (!own.length) continue;
-    const code = own.map(p => ({ path: p.slice(dir.length), content: text(p) }));
+    const code = own.filter(p => !isResourcePath(p)).map(p => ({ path: p.slice(dir.length), content: text(p) }));
+    const resources = readResources(own, dir);
     let deps = json.dependencies?.[info.id] ?? {};
     if (files[`${dir}package.json`]) {
       const pkg = readJson(files[`${dir}package.json`], `${name}/${dir}package.json`) as { dependencies?: Record<string, string> };
@@ -182,15 +188,16 @@ function parseAssetFolder(name: string, input: Files, prefix: string): ParsedAss
       const single = code.find(f => /^index\.html?$/i.test(f.path)) ?? (code.length === 1 && /\.html?$/i.test(code[0].path) ? code[0] : null);
       if (!code.some(f => f.path === 'markup.html') && single) {
         const split = splitHtml(single.content);
-        variants.push({ framework: 'html', entry: 'markup.html', dependencies: {}, files: [
+        variants.push({ framework: 'html', entry: 'markup.html', dependencies: deps, ...(resources.length ? { resources } : {}), files: [
           { path: 'markup.html', content: split.markup }, { path: 'style.css', content: split.style }, { path: 'script.js', content: split.script },
+          ...code.filter(f => f !== single && !['markup.html', 'style.css', 'script.js'].includes(f.path)),
         ] });
         continue;
       }
     }
     const entry = pickEntry(info.id, code, json.entry?.[info.id]);
     if (!entry) throw new FolderProblem(`${info.label} 实现找不到入口文件，在 asset.json 的 entry 里写明，例如 {"${info.id}": "${info.entry}"}`);
-    variants.push({ framework: info.id, entry, dependencies: deps, files: code });
+    variants.push({ framework: info.id, entry, dependencies: deps, files: code, ...(resources.length ? { resources } : {}) });
   }
 
   // 没有框架目录时，素材文件夹根目录下的单个 index.html / 组件文件也算
@@ -198,7 +205,8 @@ function parseAssetFolder(name: string, input: Files, prefix: string): ParsedAss
     const html = paths.find(p => /^index\.html?$/i.test(p)) ?? (paths.filter(p => /\.html?$/i.test(p) && !p.includes('/')).length === 1 ? paths.find(p => /\.html?$/i.test(p) && !p.includes('/')) : undefined);
     if (html) {
       const split = splitHtml(text(html));
-      variants.push({ framework: 'html', entry: 'markup.html', dependencies: {}, files: [
+      const resources = readResources(paths.filter(p => !p.startsWith('media/')));
+      variants.push({ framework: 'html', entry: 'markup.html', dependencies: json.dependencies?.html ?? {}, ...(resources.length ? { resources } : {}), files: [
         { path: 'markup.html', content: split.markup }, { path: 'style.css', content: split.style }, { path: 'script.js', content: split.script },
       ] });
     } else {
@@ -209,12 +217,14 @@ function parseAssetFolder(name: string, input: Files, prefix: string): ParsedAss
         const code = loose.filter(p => fw === 'vue' ? !/.(tsx|jsx)$/i.test(p) : extOf(p) !== 'vue').map(p => ({ path: p, content: text(p) }));
         const entry = pickEntry(fw, code, json.entry?.[fw]);
         if (!entry) throw new FolderProblem(`找不到入口文件，在 asset.json 的 entry 里写明，例如 {"${fw}": "${frameworkInfo(fw)!.entry}"}`);
-        variants.push({ framework: fw, entry, dependencies: json.dependencies?.[fw] ?? {}, files: code });
+        const resources = readResources(paths.filter(p => !p.startsWith('media/')));
+        variants.push({ framework: fw, entry, dependencies: json.dependencies?.[fw] ?? {}, files: code, ...(resources.length ? { resources } : {}) });
       }
     }
   }
   if (!variants.length) throw new FolderProblem('没有找到代码：需要 html/、react/、vue/ 里的任意一个，或一个 index.html');
   for (const v of variants) {
+    if (json.previewEntry?.[v.framework]) v.previewEntry = json.previewEntry[v.framework];
     if (!v.files.some(f => f.path === v.entry && f.content.trim())) throw new FolderProblem(`${frameworkInfo(v.framework)!.label} 的入口文件 ${v.entry} 是空的`);
   }
 
@@ -275,12 +285,19 @@ function parseAssetFolder(name: string, input: Files, prefix: string): ParsedAss
     favorite: json.favorite === true,
     cover,
     ...(json.previewScale !== undefined ? { previewScale: previewScale(json.previewScale) } : {}),
+    ...(typeof json.deletedAt === 'string' && Number.isFinite(Date.parse(json.deletedAt)) ? { deletedAt: json.deletedAt } : {}),
     ...(json.previewViewport ? { previewViewport: previewViewport(json.previewViewport) } : {}),
     createdAt: now,
     updatedAt: now,
     texts,
     variants,
     media,
+    resourceFiles: variants.flatMap(v => (v.resources ?? []).map(f => {
+      const frameworkPath = `${v.framework}/${f.path}`;
+      const ownPath = Object.hasOwn(input, `code/${frameworkPath}`) ? `code/${frameworkPath}`
+        : Object.hasOwn(input, frameworkPath) ? frameworkPath : f.path;
+      return { framework: v.framework, path: f.path, zipPath: prefix + ownPath };
+    })),
   };
 }
 
@@ -355,7 +372,7 @@ export function parseFolderFiles(input: Files, name = 'asset'): FolderPackage {
 
 /** 把素材导出成素材文件夹格式，返回相对路径 → 内容；可以写到磁盘或打包下载 */
 export function folderFiles(lib: Library, ids?: string[]): Files {
-  const targetIds = ids?.length ? ids : lib.repo.allAssetIds();
+  const targetIds = ids?.length ? ids : lib.repo.allAssetIds(true);
   const categories = new Map(lib.listCategories().map(c => [c.id, c]));
   const tagLabels = new Map(lib.repo.listTags().map(t => [t.name.toLowerCase(), t.labels]));
   const out: Files = { 'README.md': strToU8(folderGuide(cliCommand(LOCAL_CLI))) };
@@ -377,17 +394,23 @@ export function folderFiles(lib: Library, ids?: string[]): Files {
     if (Object.keys(summary).length) json.summary = summary;
     const entry = Object.fromEntries(a.variants.filter(v => !frameworkInfo(v.framework)?.fixed).map(v => [v.framework, v.entry]));
     if (Object.keys(entry).length) json.entry = entry;
+    const previewEntry = Object.fromEntries(a.variants.filter(v => v.previewEntry).map(v => [v.framework, v.previewEntry!]));
+    if (Object.keys(previewEntry).length) json.previewEntry = previewEntry;
     const deps = Object.fromEntries(a.variants.filter(v => Object.keys(v.dependencies).length).map(v => [v.framework, v.dependencies]));
     if (Object.keys(deps).length) json.dependencies = deps;
     if (a.sourceUrl) json.sourceUrl = a.sourceUrl;
     if (a.sourceName) json.sourceName = a.sourceName;
     if (a.favorite) json.favorite = true;
+    if (a.deletedAt) json.deletedAt = a.deletedAt;
     if (a.previewScale !== undefined) json.previewScale = a.previewScale;
     if (a.previewViewport) json.previewViewport = a.previewViewport;
     if (a.cover) json.cover = a.cover.slice(`assets/${a.id}/`.length);
     out[`${a.id}/asset.json`] = strToU8(JSON.stringify(json, null, 2) + '\n');
     for (const [loc, t] of Object.entries(a.texts)) if (t.idea) out[`${a.id}/idea.${loc}.md`] = strToU8(t.idea.trimEnd() + '\n');
-    for (const v of a.variants) for (const f of v.files) out[`${a.id}/${v.framework}/${f.path}`] = strToU8(f.content);
+    for (const v of a.variants) {
+      for (const f of v.files) out[`${a.id}/${v.framework}/${f.path}`] = strToU8(f.content);
+      for (const f of v.resources ?? []) out[`${a.id}/${v.framework}/${f.path}`] = fs.readFileSync(lib.getPlaybackFile(a.id, v.framework, f.path).abs);
+    }
     for (const m of a.media) {
       const abs = lib.resolve(m.path);
       if (abs && fs.existsSync(abs)) out[`${a.id}/${m.path.slice(`assets/${a.id}/`.length)}`] = fs.readFileSync(abs);

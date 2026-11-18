@@ -115,6 +115,25 @@ const MIGRATIONS: Migration[] = [
     alter table variants add column theme text;
     alter table asset_texts add column theme_ideas text not null default '{}';
   `,
+  `
+    create table files_with_resources (
+      id integer primary key,
+      asset_id text not null references assets(id) on delete cascade,
+      role text not null check (role in ('code', 'media', 'resource')),
+      path text not null,
+      mime text not null,
+      size integer not null,
+      label text not null default '',
+      framework text not null default '',
+      unique (asset_id, path)
+    );
+    insert into files_with_resources select id, asset_id, role, path, mime, size, label, framework from files;
+    drop table files;
+    alter table files_with_resources rename to files;
+  `,
+  `alter table variants add column preview_entry text;`,
+  `alter table assets add column deleted_at text;
+   create index assets_deleted on assets(deleted_at, updated_at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

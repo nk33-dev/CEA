@@ -4,7 +4,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { framework as frameworkInfo, FRAMEWORK_IDS } from '../shared/frameworks.ts';
 import { LOCALE_IDS, normalizeLocale } from '../shared/locales.ts';
-import { ASSET_ID_PATTERN, assetDir, extOf, isImage, mimeOf, normalizeRelPath, slugify } from '../shared/paths.ts';
+import { ASSET_ID_PATTERN, assetDir, extOf, isImage, isResourcePath, mimeOf, normalizeRelPath, slugify } from '../shared/paths.ts';
 import { ASSET_TYPES, type AssetDetail, type AssetInput, type AssetSummary, type AssetText, type Category, type CodeFile, type LibraryInfo, type Variant } from '../shared/types.ts';
 import { Repository, type AssetRecord, type FileRecord, type VariantRecord } from './db/repository.ts';
 import { migrate, SCHEMA_VERSION } from './db/schema.ts';
@@ -16,6 +16,10 @@ import { cleanLabels } from '../shared/contentLocale.ts';
 const MARKER = 'library.json';
 const DB_FILE = 'library.db';
 const MAX_CODE_BYTES = 2 * 1024 * 1024;
+const MAX_RESOURCE_BYTES = 1024 * 1024 * 1024;
+
+/** 键为 <framework>/<相对资源路径>，仅导入时携带文件内容。 */
+export type ResourceData = Record<string, Uint8Array>;
 
 interface Marker {
   format: 'craft-every-aspect-library';
@@ -92,6 +96,32 @@ export class Library {
     return new Library(root, marker.libraryId, db);
   }
 
+  static identify(dir: string): { root: string; libraryId: string } {
+    const root = fs.realpathSync(path.resolve(dir));
+    const marker = JSON.parse(fs.readFileSync(path.join(root, MARKER), 'utf8')) as Partial<Marker>;
+    if (marker.format !== 'craft-every-aspect-library' || typeof marker.libraryId !== 'string' || !marker.libraryId.trim()) {
+      throw badRequest(`不是有效的 CEA 素材库：${root}`);
+    }
+    if (!fs.statSync(path.join(root, DB_FILE)).isFile()) throw badRequest(`素材库数据库不存在：${root}`);
+    return { root, libraryId: marker.libraryId };
+  }
+
+  static openExisting(dir: string, readOnly = true): Library {
+    const { root, libraryId } = Library.identify(dir);
+    if (!readOnly) return Library.open(root);
+    const db = new DatabaseSync(path.join(root, DB_FILE), { readOnly: true, timeout: 3000 });
+    try {
+      const row = db.prepare("select value from meta where key = 'schema_version'").get() as { value: string } | undefined;
+      if (Number(row?.value) !== SCHEMA_VERSION) {
+        throw new Error('素材库结构版本不兼容。请先使用匹配版本的 CEA，或运行 cea library upgrade 升级旧库。');
+      }
+      return new Library(root, libraryId, db);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+  }
+
   /** 判断目录能否作为素材库打开：不存在、空目录或已有素材库 */
   static check(dir: string): 'library' | 'empty' | 'occupied' {
     const root = path.resolve(dir);
@@ -106,7 +136,7 @@ export class Library {
   }
 
   info(): LibraryInfo {
-    return { path: this.root, libraryId: this.libraryId, schemaVersion: SCHEMA_VERSION, assetCount: this.repo.countAssets() };
+    return { path: this.root, libraryId: this.libraryId, schemaVersion: SCHEMA_VERSION, assetCount: this.repo.countAssets(), trashCount: this.repo.countAssets(true) };
   }
 
   /** 把库内相对路径转成绝对路径；越出库目录时返回 null */
@@ -149,6 +179,15 @@ export class Library {
     return { asset, variant: this.readVariant(id, variant, this.repo.listFiles(id)) };
   }
 
+  getPlaybackFile(id: string, framework: string, resource: string) {
+    const clean = normalizeRelPath(resource);
+    const rel = clean && `${assetDir(id)}/code/${framework}/${clean}`;
+    const file = rel && this.repo.listFiles(id).find(f => f.path === rel && f.framework === framework && f.role !== 'media');
+    const abs = file && this.resolve(file.path);
+    if (!file || !abs || !fs.existsSync(abs)) throw notFound('预览资源不存在');
+    return { ...file, abs };
+  }
+
   private readVariant(id: string, { supportsDarkMode: _, ...variant }: VariantRecord, files: ReturnType<Repository['listFiles']>): Variant {
     const prefix = `${assetDir(id)}/code/${variant.framework}/`;
     const code = files.filter(f => f.role === 'code' && f.framework === variant.framework).map(f => {
@@ -156,10 +195,12 @@ export class Library {
       return { path: f.path.slice(prefix.length), content: abs && fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '' };
     });
     const resolved = resolveTheme({ ...variant, files: code });
-    return { ...variant, files: code, ...(resolved.mode === 'both' ? { supportsDarkMode: true } : {}) };
+    const resources = files.filter(f => f.role === 'resource' && f.framework === variant.framework)
+      .map(f => ({ path: f.path.slice(prefix.length), mime: f.mime, size: f.size }));
+    return { ...variant, files: code, ...(resources.length ? { resources } : {}), ...(resolved.mode === 'both' ? { supportsDarkMode: true } : {}) };
   }
 
-  createAsset(input: AssetInput, options: { id?: string; createdAt?: string; updatedAt?: string } = {}): AssetDetail {
+  createAsset(input: AssetInput, options: { id?: string; createdAt?: string; updatedAt?: string; resourceData?: ResourceData } = {}): AssetDetail {
     const clean = this.validate(input);
     const requested = (options.id ?? input.id ?? '').trim();
     if (requested && !ASSET_ID_PATTERN.test(requested)) throw badRequest('素材 ID 只能用小写字母、数字和连字符，最长 64 个字符');
@@ -179,7 +220,7 @@ export class Library {
       createdAt: options.createdAt ?? now(),
       updatedAt: options.updatedAt ?? options.createdAt ?? now(),
     };
-    const written = this.writeCode(id, clean.variants);
+    const written = this.writeCode(id, clean.variants, options.resourceData);
     try {
       this.repo.transaction(() => {
         this.repo.insertAsset(record);
@@ -192,10 +233,12 @@ export class Library {
     return this.getAsset(id);
   }
 
-  updateAsset(id: string, input: AssetInput): AssetDetail {
+  updateAsset(id: string, input: AssetInput, options: { resourceData?: ResourceData } = {}): AssetDetail {
     const existing = this.repo.getAsset(id);
     if (!existing) throw notFound('素材不存在或已被删除');
+    if (existing.deletedAt) throw badRequest('请先从回收站恢复组件');
     const oldVariants = this.repo.getVariants(id);
+    const oldFiles = this.repo.listFiles(id, 'resource');
     const oldTexts = this.repo.getTexts(id);
     const suppliedLocales = new Set(Object.keys(input.texts ?? {}).map(normalizeLocale));
     // 旧客户端可能只提交它认识的语言；未提交的外部语言需保留。
@@ -203,8 +246,16 @@ export class Library {
       !LOCALE_IDS.includes(locale) && !suppliedLocales.has(locale)));
     const clean = this.validate({
       ...input,
-      variants: (input.variants ?? []).map(v => !Object.hasOwn(v, 'theme') && oldVariants.find(old => old.framework === v.framework)?.theme
-        ? { ...v, theme: oldVariants.find(old => old.framework === v.framework)!.theme } : v),
+      variants: (input.variants ?? []).map(v => ({
+        ...v,
+        ...(!Object.hasOwn(v, 'previewEntry') && oldVariants.find(old => old.framework === v.framework)?.previewEntry
+          ? { previewEntry: oldVariants.find(old => old.framework === v.framework)!.previewEntry } : {}),
+        ...(!Object.hasOwn(v, 'theme') && oldVariants.find(old => old.framework === v.framework)?.theme
+          ? { theme: oldVariants.find(old => old.framework === v.framework)!.theme } : {}),
+        ...(!Object.hasOwn(v, 'resources') ? { resources: oldFiles.filter(f => f.framework === v.framework).map(f => ({
+          path: f.path.slice(`${assetDir(id)}/code/${v.framework}/`.length), mime: f.mime, size: f.size,
+        })) } : {}),
+      })),
       texts: { ...retainedTexts, ...Object.fromEntries(Object.entries(input.texts ?? {}).map(([locale, text]) => {
         const old = oldTexts[normalizeLocale(locale) ?? locale];
         return [locale, {
@@ -214,7 +265,7 @@ export class Library {
         }];
       })) },
     });
-    const written = this.writeCode(id, clean.variants);
+    const written = this.writeCode(id, clean.variants, options.resourceData);
     this.repo.transaction(() => {
       this.repo.updateAsset({
         ...existing,
@@ -235,6 +286,11 @@ export class Library {
 
   deleteAsset(id: string) {
     this.manageAssets([id], 'delete');
+  }
+
+  /** 导入覆盖需要替换同一 ID，不经过回收站。 */
+  replaceAsset(id: string) {
+    this.removeAssets([id]);
   }
 
   setFavorite(id: string, favorite: boolean) {
@@ -365,11 +421,39 @@ export class Library {
     return { changed: unique.length };
   }
 
-  manageAssets(ids: string[], action: 'delete' | 'tag' | 'untag' | 'category', value = '') {
+  manageAssets(ids: string[], action: 'delete' | 'restore' | 'purge' | 'tag' | 'untag' | 'category', value = '') {
     const unique = [...new Set(ids)];
     if (!unique.length || unique.length > 1000) throw badRequest('请选择 1 至 1000 个组件');
     if (unique.some(id => !this.repo.getAsset(id))) throw notFound('部分组件已不存在，请刷新后重试');
-    if (action === 'delete') {
+    const records = unique.map(id => this.repo.getAsset(id)!);
+    if (action === 'delete' || action === 'restore') {
+      const deletedAt = action === 'delete' ? now() : null;
+      this.repo.transaction(() => {
+        for (const record of records) {
+          if (action === 'delete' && record.deletedAt) continue;
+          this.repo.setDeletedAt(record.id, deletedAt);
+        }
+      });
+    } else if (action === 'purge') {
+      if (records.some(a => !a.deletedAt)) throw badRequest('请先将组件移入回收站');
+      this.removeAssets(unique);
+    } else {
+      if (records.some(a => a.deletedAt)) throw badRequest('请先从回收站恢复组件');
+      const tag = value.trim().replace(/^#/, '').replace(/\s+/g, ' ').slice(0, 30);
+      if ((action === 'tag' || action === 'untag') && !tag) throw badRequest('标签名称不能为空');
+      if (action === 'category' && value && !this.repo.getCategory(value)) throw notFound('分类不存在');
+      this.repo.transaction(() => {
+        for (const id of unique) {
+          if (action === 'tag') this.repo.setTags(id, [...this.repo.getTags(id), tag]);
+          else if (action === 'untag') this.repo.setTags(id, this.repo.getTags(id).filter(name => name.toLowerCase() !== tag.toLowerCase()));
+          else this.repo.updateAsset({ ...this.repo.getAsset(id)!, categoryId: value || null });
+        }
+      });
+    }
+    return { changed: unique.length };
+  }
+
+  private removeAssets(unique: string[]) {
       const trash = path.join(this.root, `.trash-${crypto.randomUUID()}`);
       const moved: string[] = [];
       fs.mkdirSync(trash);
@@ -385,19 +469,6 @@ export class Library {
         throw e;
       }
       try { fs.rmSync(trash, { recursive: true, force: true }); } catch (e) { console.error('组件已删除，临时目录清理失败：', trash, e); }
-    } else {
-      const tag = value.trim().replace(/^#/, '').replace(/\s+/g, ' ').slice(0, 30);
-      if ((action === 'tag' || action === 'untag') && !tag) throw badRequest('标签名称不能为空');
-      if (action === 'category' && value && !this.repo.getCategory(value)) throw notFound('分类不存在');
-      this.repo.transaction(() => {
-        for (const id of unique) {
-          if (action === 'tag') this.repo.setTags(id, [...this.repo.getTags(id), tag]);
-          else if (action === 'untag') this.repo.setTags(id, this.repo.getTags(id).filter(name => name.toLowerCase() !== tag.toLowerCase()));
-          else this.repo.updateAsset({ ...this.repo.getAsset(id)!, categoryId: value || null });
-        }
-      });
-    }
-    return { changed: unique.length };
   }
 
   // ---- 内部 ----
@@ -438,12 +509,14 @@ export class Library {
    * 先把代码写到临时目录，成功后再替换旧的 code 目录，
    * 避免写到一半失败时留下新旧混杂的文件。
    */
-  private writeCode(id: string, variants: Variant[]): FileRecord[] {
+  private writeCode(id: string, variants: Variant[], resourceData: ResourceData = {}): FileRecord[] {
     const dir = this.absAssetDir(id);
     const target = path.join(dir, 'code');
     const staging = path.join(dir, `.code-${crypto.randomBytes(4).toString('hex')}`);
     fs.mkdirSync(staging, { recursive: true });
     const records: FileRecord[] = [];
+    const existing = new Set(this.repo.listFiles(id, 'resource').map(f => f.path));
+    let resourceBytes = 0;
     try {
       for (const v of variants) {
         for (const file of v.files) {
@@ -458,6 +531,20 @@ export class Library {
             size: Buffer.byteLength(file.content),
             label: '',
           });
+        }
+        for (const resource of v.resources ?? []) {
+          const rel = `${assetDir(id)}/code/${v.framework}/${resource.path}`;
+          const abs = path.join(staging, v.framework, resource.path);
+          const data = resourceData[`${v.framework}/${resource.path}`];
+          const source = this.resolve(rel)!;
+          if (!data && (!existing.has(rel) || !fs.existsSync(source))) throw badRequest(`资源文件丢失：${resource.path}`);
+          const size = data ? data.byteLength : fs.statSync(source).size;
+          resourceBytes += size;
+          if (resourceBytes > MAX_RESOURCE_BYTES) throw badRequest('资源总大小超过 1 GB');
+          fs.mkdirSync(path.dirname(abs), { recursive: true });
+          if (data) fs.writeFileSync(abs, data);
+          else fs.copyFileSync(source, abs);
+          records.push({ role: 'resource', framework: v.framework, path: rel, mime: mimeOf(resource.path), size, label: '' });
         }
       }
       replaceDir(staging, target, path.join(dir, `.old-${crypto.randomBytes(4).toString('hex')}`));
@@ -503,17 +590,29 @@ export class Library {
       for (const file of v.files ?? []) {
         const p = normalizeRelPath(String(file.path ?? ''));
         if (!p) throw badRequest(`文件名不合法：${file.path}`);
+        if (isResourcePath(p) && !['svg', 'gltf'].includes(extOf(p))) throw badRequest(`请将 ${p} 作为资源文件导入，不要作为文本源码保存`);
         if (seen.has(p.toLowerCase())) throw badRequest(`${info.label} 实现里文件名重复：${p}`);
         seen.add(p.toLowerCase());
         const content = String(file.content ?? '');
         total += Buffer.byteLength(content);
         files.push({ path: p, content });
       }
+      const resources = (v.resources ?? []).map(resource => {
+        const p = normalizeRelPath(String(resource.path ?? ''));
+        if (!p || !isResourcePath(p)) throw badRequest(`资源文件名不合法或类型不支持：${resource.path}`);
+        if (seen.has(p.toLowerCase())) throw badRequest(`${info.label} 实现里文件名重复：${p}`);
+        seen.add(p.toLowerCase());
+        return { path: p, mime: mimeOf(p), size: 0 };
+      });
       // HTML 固定三个文件；其他框架的入口可以改名，但必须是存在的文件
       for (const p of info.fixed ?? []) if (!files.some(f => f.path === p)) files.push({ path: p, content: '' });
       const entry = info.fixed ? info.entry : normalizeRelPath(String(v.entry || info.entry)) ?? '';
       if (!files.some(f => f.path === entry && f.content.trim())) throw badRequest(`${info.label} 实现缺少入口文件 ${entry || info.entry}`);
       if (!info.entryExt.includes(extOf(entry))) throw badRequest(`${info.label} 的入口文件需要是 ${info.entryExt.map(e => '.' + e).join(' / ')}`);
+      const previewEntry = v.previewEntry ? normalizeRelPath(String(v.previewEntry)) : undefined;
+      if (v.previewEntry && (!previewEntry || !info.entryExt.includes(extOf(previewEntry)) || !files.some(f => f.path === previewEntry && f.content.trim()))) {
+        throw badRequest(`${info.label} 实现缺少有效的预览入口 ${v.previewEntry}`);
+      }
 
       const dependencies: Record<string, string> = {};
       for (const [name, version] of Object.entries(v.dependencies ?? {})) {
@@ -525,7 +624,7 @@ export class Library {
       try { theme = parseThemeContract(v.theme); }
       catch (e) { throw badRequest((e as Error).message); }
       const support = resolveTheme({ files, theme });
-      variants.push({ framework: info.id, entry, dependencies, files, ...(theme ? { theme } : {}), ...(support.mode === 'both' ? { supportsDarkMode: true } : {}) });
+      variants.push({ framework: info.id, entry, ...(previewEntry ? { previewEntry } : {}), dependencies, files, ...(resources.length ? { resources } : {}), ...(theme ? { theme } : {}), ...(support.mode === 'both' ? { supportsDarkMode: true } : {}) });
     }
     if (type === 'component' && !variants.length) throw badRequest('组件至少需要一种实现');
     if (total > MAX_CODE_BYTES) throw badRequest('代码总大小超过 2 MB');

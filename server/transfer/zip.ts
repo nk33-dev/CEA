@@ -3,8 +3,8 @@ import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import { framework as frameworkInfo, frameworkLabel } from '../../shared/frameworks.ts';
 import { contentLanguages, normalizeLocale } from '../../shared/locales.ts';
 import { ASSET_ID_PATTERN, assetDir, extOf, mimeOf, normalizeRelPath } from '../../shared/paths.ts';
-import { buildIdeaPrompt, buildReplicaPrompt, buildSource, pickText } from '../../shared/prompt.ts';
-import { ASSET_TYPES, type AssetDetail, type AssetText, type AssetType, type DuplicateStrategy, type ImportPreview, type ImportResult, type Variant } from '../../shared/types.ts';
+import { buildIdeaPrompt, buildReplicaPrompt, htmlSourceDocument, pickText } from '../../shared/prompt.ts';
+import { ASSET_TYPES, type AssetDetail, type AssetText, type AssetType, type DuplicateStrategy, type FileRole, type ImportPreview, type ImportResult, type Variant } from '../../shared/types.ts';
 import { badRequest } from '../errors.ts';
 import { Library } from '../library.ts';
 import { previewScale, previewViewport, type PreviewViewport } from '../../shared/preview.ts';
@@ -13,13 +13,13 @@ import { alignVocabulary } from './vocabulary.ts';
 import { parseThemeContract, parseThemeIdeas, resolveTheme, themeLabel } from '../../shared/theme.ts';
 
 export const FORMAT = 'craft-every-aspect-export';
-/** v1：单一实现；v2：多语言文案与多框架；v3：译名；v4：主题声明与分主题思路 */
-export const FORMAT_VERSION = 4;
+/** v7：备份保留回收站状态。 */
+export const FORMAT_VERSION = 7;
 const MAX_UNZIPPED = 2 * 1024 * 1024 * 1024;
 const STORED_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm', 'mov']);
 
 export interface ManifestFile {
-  role: 'code' | 'media';
+  role: FileRole;
   /** 相对素材目录，例如 code/react/Component.tsx、media/cover.png */
   path: string;
   mime: string;
@@ -42,6 +42,7 @@ export interface ManifestAsset {
   tagLabels?: Record<string, Record<string, string>>;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
   texts: Record<string, AssetText>;
   variants: Omit<Variant, 'files'>[];
   files: ManifestFile[];
@@ -79,10 +80,11 @@ function readme(asset: AssetDetail): string {
   lines.push('## 实现');
   for (const v of asset.variants) {
     const deps = Object.entries(v.dependencies).map(([n, ver]) => `${n}@${ver}`);
-    const run = v.framework === 'html' ? '浏览器直接打开 source.html' : `入口 code/${v.framework}/${v.entry}，默认导出组件`;
+    const run = v.framework === 'html' ? '入口 source.html；含 ES 模块时通过开发服务器打开并安装声明的依赖' : `入口 code/${v.framework}/${v.entry}，默认导出组件`;
     lines.push(`- ${frameworkLabel(v.framework)}：${run}${deps.length ? `；依赖 ${deps.join(' ')}` : ''}`);
     const theme = resolveTheme(v);
     lines.push(`  组件主题：${themeLabel(theme.mode)}${theme.source === 'declared' ? '（已声明）' : '（兼容读取）'}；预览背景不属于组件主题。`);
+    if (v.resources?.length) lines.push(`  资源：${v.resources.map(f => `code/${v.framework}/${f.path}`).join('、')}，保持相对路径。`);
   }
   lines.push('', '## 提示词', 'prompts/ 下按「框架.语言」放复刻提示词，按语言放思路提示词。');
   if (asset.media.length) {
@@ -93,7 +95,7 @@ function readme(asset: AssetDetail): string {
 
 /** 整库或选中素材的 ZIP：清单、代码和媒体文件 */
 export function exportLibrary(lib: Library, ids?: string[]): Uint8Array {
-  const targetIds = ids?.length ? ids : lib.repo.allAssetIds();
+  const targetIds = ids?.length ? ids : lib.repo.allAssetIds(true);
   const assets = targetIds.map(id => lib.getAsset(id));
   const categories = lib.listCategories();
   const tagLabels = new Map(lib.repo.listTags().map(t => [t.name.toLowerCase(), t.labels]));
@@ -120,13 +122,19 @@ export function exportLibrary(lib: Library, ids?: string[]): Uint8Array {
       ...(asset.previewViewport ? { previewViewport: asset.previewViewport } : {}),
       createdAt: asset.createdAt,
       updatedAt: asset.updatedAt,
+      ...(asset.deletedAt ? { deletedAt: asset.deletedAt } : {}),
       texts: asset.texts,
-      variants: asset.variants.map(({ files: _, ...variant }) => variant),
+      variants: asset.variants.map(({ files: _, resources: __, ...variant }) => variant),
       files: [
         ...asset.variants.flatMap(v => v.files.map(f => {
           const data = strToU8(f.content);
           zip[codeRel(asset.id, v.framework, f.path)] = data;
           return { role: 'code' as const, path: `code/${v.framework}/${f.path}`, mime: mimeOf(f.path), size: data.byteLength, label: '' };
+        })),
+        ...asset.variants.flatMap(v => (v.resources ?? []).map(f => {
+          const rel = codeRel(asset.id, v.framework, f.path);
+          put(zip, rel, readFile(lib, rel));
+          return { role: 'resource' as const, path: `code/${v.framework}/${f.path}`, mime: f.mime, size: f.size, label: '' };
         })),
         ...asset.media.map(f => {
           put(zip, f.path, readFile(lib, f.path));
@@ -147,7 +155,9 @@ export function exportReferencePackage(lib: Library, id: string): Uint8Array {
   const languages = contentLanguages(Object.keys(asset.texts));
   for (const v of asset.variants) {
     for (const f of v.files) zip[`code/${v.framework}/${f.path}`] = strToU8(f.content);
-    if (v.framework === 'html') zip['source.html'] = strToU8(buildSource(asset, 'html'));
+    for (const f of v.resources ?? []) put(zip, `code/${v.framework}/${f.path}`, readFile(lib, codeRel(asset.id, v.framework, f.path)));
+    if (v.framework === 'html') zip['source.html'] = strToU8(htmlSourceDocument(asset.title, v, './code/html/') + '\n');
+    if (Object.keys(v.dependencies).length) zip[`code/${v.framework}/package.json`] = strToU8(JSON.stringify({ private: true, type: 'module', dependencies: v.dependencies }, null, 2));
     for (const L of languages) zip[`prompts/replica.${v.framework}.${L.id}.md`] = strToU8(buildReplicaPrompt(asset, { framework: v.framework, locale: L.id }));
     for (const L of languages) for (const targetTheme of ['light', 'dark', 'both'] as const) {
       zip[`prompts/replica.${v.framework}.${targetTheme}.${L.id}.md`] = strToU8(buildReplicaPrompt(asset, { framework: v.framework, locale: L.id, targetTheme }));
@@ -170,6 +180,9 @@ export function exportReferencePackage(lib: Library, id: string): Uint8Array {
     categoryLabels: category?.labels,
     tagLabels: Object.fromEntries(asset.tags.map(t => [t, lib.repo.getTagLabels(t)])),
     frameworks: asset.frameworks, sourceUrl: asset.sourceUrl, sourceName: asset.sourceName,
+    entry: Object.fromEntries(asset.variants.map(v => [v.framework, v.entry])),
+    previewEntry: Object.fromEntries(asset.variants.filter(v => v.previewEntry).map(v => [v.framework, v.previewEntry])),
+    dependencies: Object.fromEntries(asset.variants.map(v => [v.framework, v.dependencies])),
     supportsDarkMode: Object.fromEntries(asset.variants.filter(v => v.supportsDarkMode).map(v => [v.framework, true])),
     previewScale: asset.previewScale,
     previewViewport: asset.previewViewport,
@@ -185,6 +198,7 @@ export function exportReferencePackage(lib: Library, id: string): Uint8Array {
 export interface ParsedAsset extends Omit<ManifestAsset, 'variants' | 'files'> {
   variants: Variant[];
   media: { path: string; zipPath: string; mime: string; label: string }[];
+  resourceFiles?: { framework: string; path: string; zipPath: string }[];
 }
 
 export interface ParsedPackage {
@@ -310,13 +324,14 @@ export function parsePackageFiles(files: Record<string, Uint8Array>): ParsedPack
       if (!info) fail(`素材 ${id} 的实现方式未知：${String(v.framework)}`);
       let theme: Variant['theme'];
       try { theme = parseThemeContract(v.theme); } catch (e) { fail((e as Error).message); }
-      return { framework: info.id, entry: text(v.entry), dependencies: deps(v.dependencies), files: [], ...(theme ? { theme } : {}), ...(v.supportsDarkMode === true ? { supportsDarkMode: true } : {}) };
+      return { framework: info.id, entry: text(v.entry), ...(v.previewEntry ? { previewEntry: text(v.previewEntry) } : {}), dependencies: deps(v.dependencies), files: [], ...(theme ? { theme } : {}), ...(v.supportsDarkMode === true ? { supportsDarkMode: true } : {}) };
     });
     const media: ParsedAsset['media'] = [];
+    const resourceFiles: NonNullable<ParsedAsset['resourceFiles']> = [];
     for (const f of v2.files as (ManifestFile & { framework?: string })[]) {
       const p = normalizeRelPath(str(f.path, `素材 ${id} 的文件路径`, 500));
       if (!p || !(p.startsWith('code/') || p.startsWith('media/'))) fail(`素材 ${id} 的文件路径不合法：${String(f.path)}`);
-      const role = p.startsWith('code/') ? 'code' : 'media';
+      const role = p.startsWith('code/') ? (f.role === 'resource' && version >= 5 ? 'resource' : 'code') : 'media';
       if (f.role !== role) fail(`素材 ${id} 的文件 ${p} 类型与目录不符`);
       const zipPath = `${assetDir(id)}/${p}`;
       if (!files[zipPath]) fail(`素材 ${id} 缺少文件 ${p}`);
@@ -329,7 +344,12 @@ export function parsePackageFiles(files: Record<string, Uint8Array>): ParsedPack
       const fw = version === 1 ? f.framework! : rest.split('/')[0];
       const variant = variants.find(v => v.framework === fw);
       if (!variant) fail(`素材 ${id} 的文件 ${p} 不属于任何实现`);
-      variant.files.push({ path: version === 1 ? rest : rest.slice(fw.length + 1), content: strFromU8(files[zipPath]) });
+      const localPath = version === 1 ? rest : rest.slice(fw.length + 1);
+      if (role === 'resource') {
+        (variant.resources ??= []).push({ path: localPath, mime: mimeOf(p), size: files[zipPath].byteLength });
+        resourceFiles.push({ framework: fw, path: localPath, zipPath });
+      }
+      else variant.files.push({ path: localPath, content: strFromU8(files[zipPath]) });
     }
     for (const v of variants) if (!v.files.some(f => f.path === v.entry)) fail(`素材 ${id} 的 ${frameworkLabel(v.framework)} 入口文件不存在`);
 
@@ -352,9 +372,11 @@ export function parsePackageFiles(files: Record<string, Uint8Array>): ParsedPack
       ...(a.previewViewport ? { previewViewport: previewViewport(a.previewViewport) } : {}),
       createdAt: text(a.createdAt) || new Date().toISOString(),
       updatedAt: text(a.updatedAt) || new Date().toISOString(),
+      ...(text(a.deletedAt) && Number.isFinite(Date.parse(text(a.deletedAt))) ? { deletedAt: text(a.deletedAt) } : {}),
       texts,
       variants,
       media,
+      resourceFiles,
     };
   });
 
@@ -373,7 +395,7 @@ export function previewImport(lib: Library | null, pkg: ParsedPackage): ImportPr
     exportedAt: pkg.exportedAt,
     assetCount: pkg.assets.length,
     categoryCount: pkg.categories.length,
-    fileCount: pkg.assets.reduce((n, a) => n + a.media.length + a.variants.reduce((m, v) => m + v.files.length, 0), 0),
+    fileCount: pkg.assets.reduce((n, a) => n + a.media.length + a.variants.reduce((m, v) => m + v.files.length + (v.resources?.length ?? 0), 0), 0),
     duplicates,
     items: pkg.assets.map(a => ({ id: a.id, title: a.title, frameworks: a.variants.map(v => v.framework) })),
   };
@@ -408,14 +430,21 @@ export function importPackage(lib: Library, pkg: ParsedPackage, duplicates: Dupl
 
   for (const a of pkg.assets) {
     const exists = !!lib.repo.getAsset(a.id);
+    if (exists && duplicates === 'skip') {
+      result.skipped++;
+      continue;
+    }
+    const resourceData = Object.fromEntries((a.resourceFiles ?? []).map(f => {
+      if (!pkg.files[f.zipPath]) throw badRequest(`资源文件丢失：${f.path}`);
+      return [`${f.framework}/${f.path}`, pkg.files[f.zipPath]];
+    }));
+    for (const v of a.variants) for (const resource of v.resources ?? []) {
+      if (!resourceData[`${v.framework}/${resource.path}`]) throw badRequest(`资源文件丢失：${resource.path}`);
+    }
     let id: string | undefined = a.id;
     let title = a.title;
     if (exists) {
-      if (duplicates === 'skip') {
-        result.skipped++;
-        continue;
-      }
-      if (duplicates === 'overwrite') lib.deleteAsset(a.id);
+      if (duplicates === 'overwrite') lib.replaceAsset(a.id);
       else {
         id = undefined;
         title = `${a.title}（导入副本）`;
@@ -433,7 +462,7 @@ export function importPackage(lib: Library, pkg: ParsedPackage, duplicates: Dupl
       favorite: a.favorite,
       previewScale: a.previewScale,
       previewViewport: a.previewViewport,
-    }, { id, createdAt: a.createdAt, updatedAt: a.updatedAt });
+    }, { id, createdAt: a.createdAt, updatedAt: a.updatedAt, resourceData });
     const newId = created.id;
     const translatedTags = new Map(Object.entries(a.tagLabels ?? {}).map(([name, labels]) => [name.toLowerCase(), labels]));
     for (const tag of created.tags) {
@@ -445,6 +474,7 @@ export function importPackage(lib: Library, pkg: ParsedPackage, duplicates: Dupl
     lib.repo.transaction(() => {
       for (const f of a.media) lib.writeImportedMedia(newId, f.path, pkg.files[f.zipPath], { mime: f.mime, label: f.label });
       lib.repo.setCover(newId, a.cover ? `${assetDir(newId)}/${a.cover}` : null);
+      if (a.deletedAt) lib.repo.setDeletedAt(newId, a.deletedAt);
     });
     if (!exists) result.created++;
     else if (duplicates === 'overwrite') result.overwritten++;

@@ -16,6 +16,7 @@
 - Keep stage background and component appearance in `usePreviewSession`; leaving the page discards them. Do not persist them or read legacy `cea:theme` / `cea:component-theme` preferences.
 - Website preferences use `PREF_UI_THEME` / `PREF_UI_LOCALE`, separate from preview state and asset content language. Configuration v2 preserves these keys; importing v1 must not overwrite website preferences.
 - Syntax highlighting is presentation work, not database loading. Render readable source before highlighting; copy/export always use the complete original text.
+- Read `docs/resources.md` before changing source delivery, resource storage or preview bundling. Keep binary resources outside `Variant.files`; reuse the existing bundler and preserve resource bytes in all export formats.
 
 ## Content Languages
 

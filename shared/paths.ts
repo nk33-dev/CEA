@@ -46,7 +46,9 @@ const MIME: Record<string, string> = {
   jsx: 'text/javascript', ts: 'text/plain', tsx: 'text/plain', json: 'application/json', md: 'text/markdown',
   txt: 'text/plain', vue: 'text/plain', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
   gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
-  woff2: 'font/woff2',
+  woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf', otf: 'font/otf',
+  ico: 'image/x-icon', bmp: 'image/bmp', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+  glb: 'model/gltf-binary', gltf: 'model/gltf+json',
 };
 
 export function mimeOf(path: string): string {
@@ -59,6 +61,10 @@ export function isImage(mime: string) {
 
 export function isVideo(mime: string) {
   return mime.startsWith('video/');
+}
+
+export function isResourcePath(path: string) {
+  return /^(image|video|audio|font|model)\//.test(mimeOf(path)) || extOf(path) === 'bin';
 }
 
 /** 代码块的语言标记 */

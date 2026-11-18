@@ -30,7 +30,8 @@ particle-hero/
 ├─ html/          HTML 实现（按需）
 │  ├─ markup.html
 │  ├─ style.css
-│  └─ script.js
+│  ├─ script.js
+│  └─ resources/  实现需要的图片、字体等原文件（按需）
 ├─ react/         React 实现（按需），入口文件默认导出组件
 ├─ vue/           Vue 实现（按需），单文件组件
 └─ media/         截图或录屏，cover.png 作封面（可省略）
@@ -40,8 +41,8 @@ particle-hero/
 
 ## 三种复用内容
 
-- 源码：选中框架的完整代码。
-- 复刻：集成要求 + 选中框架的完整代码，用于交给 AI 在已有实现上改造。
+- 源码：选中框架的完整文本源码；二进制资源随参考包交付。
+- 复刻：集成要求、依赖、资源清单和选中框架的源码，用于交给 AI 在已有实现上改造。
 - 思路：只描述效果，不含代码，用于按描述重新实现。idea.<语言>.md 不会自动附上参考代码。
 
 代码放进框架目录，思路放进 idea.<语言>.md；两者分开交付，不需要把代码再贴进思路。复刻提示词由程序根据框架源码生成。
@@ -70,6 +71,9 @@ particle-hero/
   // 入口文件；叫 Component.tsx、App.tsx 或只有一个组件文件时不用写
   "entry": { "react": "ParticleHero.tsx" },
 
+  // 可选的运行示例入口；entry 保持为可复用组件，不把示例数据写进组件内部
+  "previewEntry": { "react": "Preview.tsx" },
+
   // react、vue 以外用到的 npm 包，按框架写
   "dependencies": { "react": { "motion": "^12" } },
 
@@ -97,6 +101,9 @@ titles、categoryLabels 和 tagLabels 是可选的多语言显示名称。title�
 
 ## 代码约定
 
+- 图片、字体、视频等放在各框架目录内的 resources/ 或 images/，保留相对引用；不要把大文件转成 Base64 塞进 JS、CSS 或提示词。小型内联图标可保留。资源和截图 media/ 分开，参考包、文件夹导出及完整备份均保留原文件。
+- React、Vue 可通过 import image from './images/example.webp' 引用资源。依赖在 dependencies 或框架目录的 package.json 中声明，通过包名导入；不要复制第三方库的压缩源码，也不要把预览用的构建产物作为业务源码交付。许可与署名文件保留。
+- HTML 普通脚本使用 script.js；需要 npm 依赖或多个 ES 模块时使用 script.mjs 作为模块入口，script.js 可留空。CEA 用现有打包器生成预览，不保存生成的 bundle。导出的模块源码通过目标项目的开发服务器运行。
 - 需要交付多种实现时，共用一份 style.css、同样的结构和类名，交互逻辑放进共用的 JS 模块，框架文件只负责挂载和销毁；单一实现不需要额外包装。
 - 每种实现只读取自己的框架目录，不会自动打包根目录的 shared/、README.md 或相邻框架的文件。开发时可以维护一份公共源码，交付前将需要的公共文件同步或构建到各框架目录，保持内容一致、相对引用完整；不要只留下指向目录外源码的引用。
 - 预览时 HTML 在 body 里，React、Vue 在 #root 里。最外层元素写 width: 100%、max-width 和 min-width: 0，宽内容在组件内部横向滚动，否则手机宽度下 React、Vue 会溢出。

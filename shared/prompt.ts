@@ -53,30 +53,43 @@ export interface SourcePart {
   code: string;
 }
 
+function htmlUsesFiles(v: Variant) {
+  return !!v.resources?.length || v.files.some(f => !HTML_ORDER.includes(f.path as never) && f.content.trim());
+}
+
+/** 多文件 HTML 保留相对引用；简单 HTML 继续交付可直接打开的单页。 */
+export function htmlSourceDocument(title: string, v: Variant, prefix = ''): string {
+  const get = (p: string) => v.files.find(f => f.path === p)?.content.trim() ?? '';
+  const external = htmlUsesFiles(v);
+  const escape = (value: string) => value.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const script = get('script.js');
+  return [
+    '<!doctype html>',
+    v.theme && v.theme.mode !== 'original' ? `<html lang="en" data-theme="${v.theme.default}"${v.theme.default === 'dark' ? ' class="dark"' : ''}>` : '<html lang="en">',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escape(title)}</title>`,
+    external && prefix ? `<base href="${escape(prefix)}">` : '',
+    get('style.css') && (external ? '<link rel="stylesheet" href="./style.css">' : `<style>\n${get('style.css')}\n</style>`),
+    '</head>', '<body>', get('markup.html'),
+    script && (external ? '<script src="./script.js"></script>' : `<script>\n${script.replace(/<\/script/gi, '<\\/script')}\n</script>`),
+    get('script.mjs') && '<script type="module" src="./script.mjs"></script>',
+    '</body>', '</html>',
+  ].filter(Boolean).join('\n');
+}
+
 /** 源码分段：HTML 合成一个可直接打开的页面；其他框架按文件列出，文件名写在注释里 */
 export function sourceParts(asset: PromptAsset, framework: string): SourcePart[] {
   const v = pickVariant(asset, framework);
   if (!v) return [];
   if (v.framework === 'html') {
-    const get = (p: string) => v.files.find(f => f.path === p)?.content.trim() ?? '';
-    const style = get('style.css');
-    const script = get('script.js');
-    const doc = [
-      '<!doctype html>',
-      v.theme && v.theme.mode !== 'original' ? `<html lang="en" data-theme="${v.theme.default}"${v.theme.default === 'dark' ? ' class="dark"' : ''}>` : '<html lang="en">',
-      '<head>',
-      '<meta charset="utf-8">',
-      '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      `<title>${asset.title}</title>`,
-      style && `<style>\n${style}\n</style>`,
-      '</head>',
-      '<body>',
-      get('markup.html'),
-      script && `<script>\n${script}\n</script>`,
-      '</body>',
-      '</html>',
-    ].filter(Boolean).join('\n');
-    return [{ label: null, lang: 'html', code: doc }];
+    const doc = htmlSourceDocument(asset.title, v);
+    return htmlUsesFiles(v)
+      ? [{ label: '<!-- index.html -->', lang: 'html', code: doc }, ...orderedFiles(v).map(f => ({
+          label: `/* ${f.path} */`, lang: fenceLang(f.path), code: f.content.replace(/\s+$/, ''),
+        }))]
+      : [{ label: null, lang: 'html', code: doc }];
   }
   const files = orderedFiles(v);
   const comment = (p: string) => (p.endsWith('.vue') || p.endsWith('.html') ? `<!-- ${p} -->` : p.endsWith('.css') ? `/* ${p} */` : `// ${p}`);
@@ -96,11 +109,14 @@ export function buildReplicaPrompt(asset: PromptAsset, opts: ReuseOptions): stri
   const theme = opts.targetTheme ? themePrompt(resolveTheme(v), opts.targetTheme, opts.locale) : '';
   if (theme) out.push('', theme);
   if (!v) return out.join('\n') + '\n';
+  if (v.previewEntry) out.push('', L.previewExample(v.entry, v.previewEntry));
 
   if (v.files.some(f => /\bdata-demo-only(?=[\s=/>"'`])/.test(f.content))) out.push('', L.demoOnly);
 
   const deps = Object.entries(v.dependencies);
   if (deps.length) out.push('', `${L.dependencies}: ${deps.map(([n, ver]) => `${n}@${ver}`).join(', ')}`);
+  if (v.resources?.length) out.push('', `${L.resources.title}:`, L.resources.instruction,
+    ...v.resources.map(f => `- ${f.path} (${f.mime}, ${f.size} bytes)`));
 
   for (const f of orderedFiles(v)) {
     const label = v.framework === 'html'
