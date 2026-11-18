@@ -13,14 +13,11 @@ describe('素材实现格式指引', () => {
     expect(guide).toContain('单一实现不需要额外包装');
   });
 
-  it('给 AI 的交付提示先说明格式选择，再说明多实现的一致性', () => {
+  it('给 AI 的交付提示只保留规则入口、交付与确认', () => {
     const { steps } = aiFolderSteps();
-    const choice = steps.find(step => step.label.includes('沿用素材已有格式'))!;
-    expect(choice).toBeDefined();
-    expect(choice.label).toContain('不必补齐 HTML、React、Vue');
-    expect(choice.label).toContain('新建时按需选技术栈');
-    expect(choice.label).toContain('交付多种实现时共用样式和逻辑');
-    expect(choice.label).toContain('手机宽度下也要显示一致');
-    expect(steps).toHaveLength(5);
+    expect(steps[0].command).toContain('guide');
+    expect(steps[1].label).toContain('只交付需要的实现');
+    expect(steps[2].label).toContain('覆盖同 ID 前先询问');
+    expect(steps).toHaveLength(3);
   });
 });

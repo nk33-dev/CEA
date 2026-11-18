@@ -149,7 +149,7 @@ describe('asset.json 注释与暗色识别', () => {
     expect(guide).toContain('不会自动附上参考代码');
     expect(guide).toContain('每种实现只读取自己的框架目录');
     expect(guide).toContain('不编译代码，也不验证实际运行效果');
-    expect(aiFolderPrompt()).toContain('思路写成可直接发给 AI 的简短需求，技术栈按需指定');
+    expect(aiFolderPrompt()).toContain('先看格式和素材库已有的分类、标签');
     expect(guide).toContain('不罗列 HTML、Vue、React 等交付版本');
     expect(guide).toContain('不禁止必要的技术选择');
     expect(guide).toContain('什么触发、哪里变化、如何结束');
@@ -178,9 +178,9 @@ describe('asset.json 注释与暗色识别', () => {
     expect(guide).toContain('不为了预览额外添加定时轮播或自动切换');
     expect(guide).toContain('这些控制不要求组件自动演示');
     const prompt = aiFolderPrompt();
-    expect(prompt).toContain('沿用原组件的视觉基准并截图对照');
-    expect(prompt).toContain('不另加播放、暂停按钮');
-    expect(prompt).toContain('交互组件默认等待用户操作');
+    expect(prompt).toContain('验证预览和交互');
+    expect(prompt).toContain('先检查与预演');
+    expect(prompt).toContain('覆盖同 ID 前先询问');
   });
 });
 

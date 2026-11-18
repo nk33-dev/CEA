@@ -1299,13 +1299,18 @@ button.text-link { padding: 0; border: 0; background: none; cursor: pointer; }
   .transfer-layout.is-idle .transfer-drop { min-height: 196px; gap: 12px; padding: 20px; }
   .transfer-layout.is-idle .transfer-export .transfer-actions { padding-top: 0; }
 }
-/* 导入页的 AI 入口：一行卡片，内容在说明页 */
+/* 导入页的 AI 入口与导出操作共用一行。 */
 .ai-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; padding: 14px 14px 14px 16px; border: 1px solid var(--line-2); border-radius: 12px; }
 .ai-card-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--chip); color: var(--fg); }
 .ai-card-text { display: grid; flex: 1 1 240px; gap: 2px; min-width: 0; }
 .ai-card-text strong { font-size: 14px; font-weight: 600; }
 .ai-card-text p { color: var(--fg-2); font-size: 12.5px; line-height: 1.55; }
 .ai-card-actions { display: flex; flex: none; gap: 6px; }
+.ai-card-text .choice-tabs { justify-self: start; max-width: 100%; }
+.ai-prompt-preview { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.8 var(--mono); color: var(--fg-2); }
+.ai-prompt-dialog { overflow: hidden; }
+.ai-prompt-dialog .dialog-body { max-height: calc(100dvh - 64px); grid-template-rows: auto minmax(0,1fr) auto; }
+.ai-prompt-dialog .dialog-content { min-height: 0; overflow: auto; padding-inline-end: 10px; }
 .transfer .ai-card { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 8px 12px; padding: 8px 0; border: 0; border-radius: 0; }
 .transfer .ai-card-actions { grid-column: 3; justify-self: end; }
 .transfer .ai-card-icon { width: 20px; height: 30px; border-radius: 0; background: none; color: var(--fg-2); }
@@ -1316,15 +1321,6 @@ button.text-link { padding: 0; border: 0; background: none; cursor: pointer; }
   .transfer .ai-card { grid-template-columns: 20px minmax(0,1fr); }
   .transfer .ai-card-actions { grid-column: 2; justify-self: start; margin-left: -10px; }
 }
-/* 发给 AI 的导入说明：按步骤排版，命令单独成块，长路径可换行 */
-.ai-prompt { display: grid; gap: 14px; padding: 16px 18px 18px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface); }
-.ai-prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ai-prompt-head p { color: var(--fg); font-size: 13.5px; font-weight: 500; }
-.ai-prompt ol { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
-.ai-prompt li { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; row-gap: 6px; counter-increment: step; color: var(--fg-2); font-size: 13px; line-height: 1.6; }
-.ai-prompt li::before { content: counter(step); display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--fg-3); font-size: 11px; font-weight: 600; }
-.ai-prompt li code { grid-column: 2; justify-self: start; max-width: 100%; padding: 6px 10px; border-radius: 8px; background: var(--well); color: var(--fg); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.cmd-dim { color: var(--fg-3); }
 .import-items { display: grid; gap: 1px; justify-self: stretch; max-height: 220px; margin: 0; padding: 4px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; list-style: none; }
 .import-items li { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; font-size: 13px; }
 .import-items li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1348,7 +1344,13 @@ button.text-link { padding: 0; border: 0; background: none; cursor: pointer; }
 .guide-ai { display: grid; gap: 6px; padding-bottom: 32px; border-bottom: 1px solid var(--line-2); }
 .guide-ai h1 { font-size: 20px; font-weight: 650; }
 .guide-ai > p { color: var(--fg-2); font-size: 13.5px; line-height: 1.6; }
-.guide-ai .ai-prompt { margin-top: 8px; }
+.guide-ai .ai-card { padding: 8px 0; border: 0; border-radius: 0; }
+.guide-doc .guide-title { margin: 0 0 8px; }
+.guide-sections { margin-top: 24px; border-top: 1px solid var(--line); }
+.guide-sections details { border-bottom: 1px solid var(--line); }
+.guide-sections summary { padding: 14px 0; color: var(--fg); cursor: pointer; font-weight: 550; }
+.guide-sections summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.guide-sections details > div { padding-bottom: 16px; }
 @media (max-width: 860px) {
   .guide-page { padding: 20px 16px 64px; }
 }

@@ -184,13 +184,11 @@ export function aiFolderSteps(info?: Pick<LibraryInfo, 'path' | 'cli'> | null): 
   const cli = cliCommand(info?.cli);
   const library = info?.cli ? ` --library ${quotePath(info.path, info.cli.platform)}` : '';
   return {
-    intro: '做好后按 CEA 素材文件夹交付，并导入我的素材库：',
+    intro: '按需求完成组件，按 CEA 格式交付并导入：',
     steps: [
       { label: '先看格式和素材库已有的分类、标签', command: `${cli} guide${library}` },
-      { label: '沿用素材已有格式，不必补齐 HTML、React、Vue；新建时按需选技术栈。交付多种实现时共用样式和逻辑，手机宽度下也要显示一致' },
-      { label: '沿用原组件的视觉基准并截图对照；交互组件默认等待用户操作，连续动效验证暂停与继续，不另加播放、暂停按钮' },
-      { label: '思路写成可直接发给 AI 的简短需求，技术栈按需指定；源码及公共模块放进各框架目录' },
-      { label: '写完导入，报错就按提示改到成功；已存在加 --overwrite', command: `${cli} import <文件夹>${library}` },
+      { label: '只交付需要的实现，保留资源、依赖与许可，并验证预览和交互' },
+      { label: '先检查与预演，再导入；覆盖同 ID 前先询问', command: `${cli} import <文件夹>${library}` },
     ],
   };
 }

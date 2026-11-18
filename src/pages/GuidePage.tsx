@@ -3,7 +3,7 @@ import { Fragment, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import ArrowLeft from 'lucide-react/icons/arrow-left';
 import { cliCommand, folderGuide } from '../../shared/folderGuide.ts';
-import { AiPrompt } from '../components/AiPrompt.tsx';
+import { AiPromptCard } from '../components/AiPrompt.tsx';
 import { useLibrary } from '../lib/store.tsx';
 
 /** 行内只处理 `代码`，说明书里没有别的行内格式 */
@@ -41,16 +41,29 @@ export function GuidePage() {
   useUi();
   const { info } = useLibrary();
   const cli = cliCommand(info?.cli);
-  const guide = useMemo(() => renderGuide(folderGuide(cli)), [cli]);
+  const sections = useMemo(() => folderGuide(cli).split(/^## /m).slice(1).map(section => {
+    const end = section.indexOf('\n');
+    return { title: section.slice(0, end), body: renderGuide(section.slice(end + 1)) };
+  }), [cli]);
   return (
     <div className="guide-page">
       <Link to="/transfer" className="text-link guide-back"><ArrowLeft size={14} aria-hidden="true" />{uiText("返回导入导出")}</Link>
       <section className="guide-ai" aria-labelledby="guide-ai-title">
-        <h1 id="guide-ai-title">{uiText("交给 AI 时")}</h1>
-        <p>{uiText("把下面这段接在需求后面，AI 会自己看格式并导入到当前素材库，不用贴后面的说明。")}</p>
-        <AiPrompt />
+        <h1 id="guide-ai-title">{uiText('使用说明')}</h1>
+        <AiPromptCard />
       </section>
-      <article className="guide-doc">{guide}</article>
+      <article className="guide-doc">
+        <h2 className="guide-title">{uiText('组件文件夹')}</h2>
+        <p>{uiText('每个组件一个文件夹，只放需要的实现；名称、思路和封面可选。')}</p>
+        <pre>{'my-component/\n  asset.json\n  idea.<locale>.md\n  html/ | react/ | vue/\n  media/'}</pre>
+        <p>{uiText('也支持直接导入 index.html。检查格式后，在「导入导出」中选择文件夹即可。')}</p>
+        <div className="guide-sections">
+          {sections.map(section => <details key={section.title}>
+            <summary>{uiText(section.title)}</summary>
+            <div>{section.body}</div>
+          </details>)}
+        </div>
+      </article>
     </div>
   );
 }
