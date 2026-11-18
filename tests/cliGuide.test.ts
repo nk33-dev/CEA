@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cliCommand, quotePath } from '../shared/folderGuide.ts';
+import { Library } from '../server/library.ts';
 
 const cli = fileURLToPath(new URL('../server/cli.ts', import.meta.url));
 const temps: string[] = [];
@@ -18,7 +19,9 @@ describe('CLI 素材库指引', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cea guide '));
     temps.push(root);
     const library = path.join(root, 'My Assets');
-    const output = execFileSync(process.execPath, [cli, 'guide', '--library', library], { encoding: 'utf8' });
+    Library.open(library).close();
+    const env = { ...process.env, CEA_CONFIG_DIR: path.join(root, 'config'), CEA_LIBRARY: '' };
+    const output = execFileSync(process.execPath, [cli, 'guide', '--library', library], { encoding: 'utf8', env });
     const command = `${cliCommand({ path: cli, platform: process.platform })} --library ${quotePath(library, process.platform)}`;
     expect(output).toContain(`${command} vocab`);
     expect(output).toContain(`${command} audit`);
@@ -26,7 +29,7 @@ describe('CLI 素材库指引', () => {
     expect(output).toContain(`${command} import <文件夹> --overwrite`);
     expect(output).toContain(`当前素材库已有（${library}，0 个组件）`);
 
-    const vocab = execFileSync(process.execPath, [cli, '--library', library, 'vocab', '--json'], { encoding: 'utf8' });
+    const vocab = execFileSync(process.execPath, [cli, '--library', library, 'vocab', '--json'], { encoding: 'utf8', env });
     expect(JSON.parse(vocab)).toMatchObject({ categories: [], tags: [], dependencies: [] });
   });
 });

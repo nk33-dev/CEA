@@ -67,4 +67,7 @@ export function resolveLibraryPath(argv: string[]): { path: string; fromConfig: 
 }
 
 /** 本机命令行脚本的位置，生成导入命令时用 */
-export const LOCAL_CLI = { path: fileURLToPath(new URL('./cli.ts', import.meta.url)), platform: process.platform };
+export const LOCAL_CLI = {
+  path: fileURLToPath(new URL(import.meta.url.endsWith('/cea.mjs') ? './cea.mjs' : './cli.ts', import.meta.url)),
+  platform: process.platform,
+};

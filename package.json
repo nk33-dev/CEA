@@ -4,6 +4,9 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "cea": "dist-cli/cea.mjs"
+  },
   "engines": {
     "node": ">=24"
   },
@@ -11,7 +14,9 @@
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "node --watch-path=server --watch-path=shared server/main.ts",
     "dev:web": "vite --strictPort",
-    "build": "vite build",
+    "build": "vite build && npm run build:cli",
+    "build:cli": "node build/cli.mjs",
+    "prepare": "npm run build:cli",
     "start": "node server/main.ts --serve-dist",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
