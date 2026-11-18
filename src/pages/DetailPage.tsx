@@ -25,6 +25,7 @@ import { motionLabel, presentNote } from '../../shared/notePresentation.ts';
 import { buildReuse, pickText, pickVariant, sourceParts, type ReuseKind } from '../../shared/prompt.ts';
 import { CodeView } from '../components/CodeView.tsx';
 import { CopyButton } from '../components/CopyButton.tsx';
+import { ResourceList } from '../components/ResourceList.tsx';
 import { Dialog } from '../components/Dialog.tsx';
 import { SelectControl } from '../components/SelectControl.tsx';
 import { ContentLanguage } from '../components/ContentLanguage.tsx';
@@ -115,7 +116,7 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
     try {
       await api.deleteAsset(asset.id);
       await refresh();
-      notify(uiText("已删除「{{value0}}」", {value0: localizedTitle(asset, locale)}));
+      notify(uiText("已将「{{value0}}」移入回收站", {value0: localizedTitle(asset, locale)}));
       navigate('/', { replace: true });
     } catch (e) {
       notify(errorMessage(e));
@@ -239,6 +240,7 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
                     <CopyButton key={current.kind} text={() => content} label={current.copy} className="icon-btn reuse-copy copy-compact" />
                   </div>
                 </div>
+                {current.kind !== 'idea' && <ResourceList files={pickVariant(asset, fw)?.resources} download={downloadPackage} busy={packing} />}
                 {content
                   ? <CodeView text={content} parts={parts} prose={current.kind === 'idea'} label={uiText("{{value0}}内容", {value0: current.label})} />
                   : <p className="reuse-empty">{uiText("还没有写")}{current.label}，<Link to={`/a/${asset.id}/edit`} className="link-btn">{uiText("去补上")}</Link></p>}
@@ -264,7 +266,7 @@ function DetailView({ initialAsset }: { initialAsset: AssetDetail }) {
           </>
         }
       >
-        <p>「{title}{uiText("」的代码、截图和提示词会从素材库中一并删除，无法恢复。")}</p>
+        <p>{uiText("组件将移入回收站，代码、资源和截图会保留，可随时恢复。")}</p>
       </Dialog>
     </div>
   );

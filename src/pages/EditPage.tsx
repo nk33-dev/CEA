@@ -10,7 +10,7 @@ import Trash2 from 'lucide-react/icons/trash-2';
 import { framework as frameworkInfo, FRAMEWORKS } from '../../shared/frameworks.ts';
 import { DEFAULT_LOCALE, contentLanguages, localeName } from '../../shared/locales.ts';
 import type { AssetDetail, AssetInput, AssetText, Variant } from '../../shared/types.ts';
-import { normalizeRelPath, playPath, slugify } from '../../shared/paths.ts';
+import { extOf, isResourcePath, normalizeRelPath, playPath, slugify } from '../../shared/paths.ts';
 import { parseReplicaPrompt, pickText } from '../../shared/prompt.ts';
 import { Dialog } from '../components/Dialog.tsx';
 import { FitStage, PreviewLoading, Stage } from '../components/Stage.tsx';
@@ -31,6 +31,7 @@ import type { PreviewViewport } from '../../shared/preview.ts';
 import { api, ApiError, errorMessage } from '../lib/api.ts';
 import { useLibrary } from '../lib/store.tsx';
 import { useDraftPreview } from '../lib/draftPreview.ts';
+import { ResourceList } from '../components/ResourceList.tsx';
 
 const HTML_LABEL: Record<string, string> = { 'markup.html': 'Markup', 'style.css': 'Styles', 'script.js': 'Script' };
 const HTML_PLACEHOLDER: Record<string, string> = { 'markup.html': '<div class="card">…</div>', 'style.css': '.card { … }', 'script.js': '// 在结构之后运行一次' };
@@ -146,6 +147,7 @@ export function EditPage() {
       const controller = new AbortController();
       api.asset(id!, controller.signal).then(a => {
         if (controller.signal.aborted) return;
+        if (a.deletedAt) { navigate('/trash', { replace: true }); return; }
         const d = fromAsset(a);
         open(d);
         initialDraft.current = d;
@@ -191,7 +193,7 @@ export function EditPage() {
   const themeSupport = useMemo(() => resolveTheme(variant), [variant?.theme, variant?.files]);
 
   const draftPreview = useDraftPreview(variant ? {
-    title: draft?.title || uiText("草稿"), framework: variant.framework, entry: variant.entry, files: variant.files, theme: variant.theme,
+    assetId: id, title: draft?.title || uiText("草稿"), framework: variant.framework, entry: variant.entry, previewEntry: variant.previewEntry, files: variant.files, theme: variant.theme,
   } : null);
   const previewUrl = draftPreview.url;
 
@@ -268,7 +270,8 @@ export function EditPage() {
   const addFile = () => {
     const clean = normalizeRelPath(fileName.trim());
     if (!clean) { setFileError(uiText("填写有效的相对路径，如 components/Button.tsx")); return; }
-    if (variant.files.some(f => f.path.toLowerCase() === clean.toLowerCase())) { setFileError(uiText("已有同名文件，请换一个名称")); return; }
+    if (isResourcePath(clean) && !['svg', 'gltf'].includes(extOf(clean))) { setFileError(uiText("图片、字体等资源请通过素材文件夹导入")); return; }
+    if ([...variant.files, ...(variant.resources ?? [])].some(f => f.path.toLowerCase() === clean.toLowerCase())) { setFileError(uiText("已有同名文件，请换一个名称")); return; }
     setVariant({ files: [...variant.files, { path: clean, content: '' }] });
     setActiveFile(clean);
     setFileDialog(false);
@@ -465,6 +468,7 @@ export function EditPage() {
                 aria-label={uiText("编辑 {{value0}}", {value0: current.path})}
               />
             )}
+            <ResourceList files={variant.resources} />
             <details className="code-options">
               <summary>{uiText("实现设置")}</summary>
             {!info.fixed && (
@@ -477,6 +481,12 @@ export function EditPage() {
                 <label className="field">
                   <span>{uiText("依赖 ")}<small>{uiText("每行一个，如 motion@^12")}</small></span>
                   <textarea rows={2} value={variant.deps} onChange={e => setVariant({ deps: e.target.value })} spellCheck={false} className="mono" />
+                </label>
+                <label className="field">
+                  <span>{uiText("预览入口")}</span>
+                  <SelectControl label={uiText("预览入口")} fullWidth value={variant.previewEntry ?? ''}
+                    onValueChange={previewEntry => setVariant({ previewEntry })}
+                    options={[{ value: '', label: uiText("沿用组件入口") }, ...variant.files.filter(f => info.entryExt.includes(f.path.split('.').pop()!)).map(f => ({ value: f.path, label: f.path }))]} />
                 </label>
               </div>
             )}

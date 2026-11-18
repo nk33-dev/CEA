@@ -117,6 +117,33 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(page.locator('.card-title').first()).toHaveText('Component 24');
   expect(listRequests).toBe(2);
   await expect(page.locator('.card')).toHaveCount(24);
+
+  const pageNumber = page.getByRole('textbox', { name: '页码', exact: true });
+  await pageNumber.fill('17');
+  await pageNumber.press('Enter');
+  await expect(page.locator('.card-title').first()).toHaveText('Component 384');
+  await expect(page).toHaveURL(/[?&]page=17(?:&|$)/);
+  await expect(pageNumber).toHaveValue('17');
+  const beforeCancel = listRequests;
+  await pageNumber.fill('8');
+  await pageNumber.press('Escape');
+  await expect(pageNumber).toHaveValue('17');
+  await pageNumber.fill('');
+  await pageNumber.press('Enter');
+  await expect(pageNumber).toHaveValue('17');
+  expect(listRequests).toBe(beforeCancel);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await pageNumber.fill('999');
+  await pageNumber.press('Enter');
+  await expect(page.locator('.card-title').first()).toHaveText('Component 984');
+  await expect(pageNumber).toHaveValue('42');
+  await expect(page.getByRole('button', { name: '下一页', exact: true })).toBeDisabled();
+  await pageNumber.fill('0');
+  await pageNumber.press('Enter');
+  await expect(page.locator('.card-title').first()).toHaveText('Component 0');
+  await expect(pageNumber).toHaveValue('1');
+  await expect(page.getByRole('button', { name: '上一页', exact: true })).toBeDisabled();
 });
 
 test('visible previews load together and language changes preserve frames', async ({ page }) => {

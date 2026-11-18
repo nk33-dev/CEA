@@ -4,9 +4,11 @@ import type { ThemeContract } from '../../shared/theme.ts';
 import { api, errorMessage } from './api.ts';
 
 interface PreviewInput {
+  assetId?: string;
   title: string;
   framework: string;
   entry: string;
+  previewEntry?: string;
   files: CodeFile[];
   theme?: ThemeContract | null;
 }
@@ -29,7 +31,7 @@ export function useDraftPreview(input: PreviewInput | null) {
     }
     const cached = cache.current.get(input.framework);
     const fresh = cached && Date.now() - cached.at < 5 * 60_000;
-    const same = cached && cached.input.entry === input.entry && cached.input.files === input.files && cached.input.theme === input.theme;
+    const same = cached && cached.input.assetId === input.assetId && cached.input.entry === input.entry && cached.input.previewEntry === input.previewEntry && cached.input.files === input.files && cached.input.theme === input.theme;
     if (fresh && same) {
       setUrl(cached.url);
       setError('');
@@ -56,7 +58,7 @@ export function useDraftPreview(input: PreviewInput | null) {
       });
     }, switching || !url || retrying ? 0 : 600);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [input?.framework, input?.entry, input?.files, input?.theme, retry]);
+  }, [input?.assetId, input?.framework, input?.entry, input?.previewEntry, input?.files, input?.theme, retry]);
 
   return { url, error, pending, retry: () => setRetry(value => value + 1) };
 }

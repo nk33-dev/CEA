@@ -1,7 +1,7 @@
 import { uiText, useUi } from './lib/uiI18n.ts';
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, NavLink, Outlet, RouterProvider, ScrollRestoration, useNavigation, type RouteObject } from 'react-router';
+import { createBrowserRouter, NavLink, Outlet, RouterProvider, ScrollRestoration, redirect, useNavigation, type RouteObject } from 'react-router';
 import { LibraryProvider, useLibrary } from './lib/store.tsx';
 import { api } from './lib/api.ts';
 import { loadDetailPage } from './lib/detailRoute.ts';
@@ -61,7 +61,10 @@ const routes: RouteObject[] = [
       { path: '/new', lazy: async () => ({ Component: (await import('./pages/EditPage.tsx')).EditPage }) },
       {
         path: '/a/:id',
-        loader: ({ params, request }) => api.asset(params.id!, request.signal),
+        loader: async ({ params, request }) => {
+          const asset = await api.asset(params.id!, request.signal);
+          return asset.deletedAt ? redirect('/trash') : asset;
+        },
         lazy: async () => {
           const page = await loadDetailPage();
           return { Component: page.DetailPage, ErrorBoundary: page.DetailError };
@@ -71,6 +74,7 @@ const routes: RouteObject[] = [
       { path: '/transfer', lazy: async () => ({ Component: (await import('./pages/TransferPage.tsx')).TransferPage }) },
       { path: '/settings', lazy: async () => ({ Component: (await import('./pages/SettingsPage.tsx')).SettingsPage }) },
       { path: '/organize', lazy: async () => ({ Component: (await import('./pages/OrganizePage.tsx')).OrganizePage }) },
+      { path: '/trash', lazy: async () => ({ Component: (await import('./pages/TrashPage.tsx')).TrashPage }) },
       { path: '/guide', lazy: async () => ({ Component: (await import('./pages/GuidePage.tsx')).GuidePage }) },
       { path: '*', Component: NotFound },
     ],
