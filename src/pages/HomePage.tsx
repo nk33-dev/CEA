@@ -65,7 +65,7 @@ export function HomePage() {
   const [action, setAction] = useState<'delete' | 'tag' | 'untag' | 'category' | null>(null);
   const [value, setValue] = useState('');
   const search = useRef<HTMLInputElement>(null);
-  const results = useRef<HTMLElement>(null);
+  const browseStart = useRef<HTMLDivElement>(null);
   const pendingPageScroll = useRef(false);
   const update = useCallback((patch: Record<string, string | null>, paging = false) => {
     setParams(prev => {
@@ -117,7 +117,7 @@ export function HomePage() {
   useLayoutEffect(() => {
     if (!loading && data && pendingPageScroll.current) {
       pendingPageScroll.current = false;
-      results.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+      browseStart.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     }
   }, [data, loading]);
   useEffect(() => { setSelected(new Set()); }, [info?.libraryId]);
@@ -187,7 +187,7 @@ export function HomePage() {
   };
 
   return (
-    <PreviewActivity><div className="home">
+    <PreviewActivity><div ref={browseStart} className="home">
       <div className="results-bar">
         <label className="search"><Search size={16} aria-hidden="true" />
           <input ref={search} type="search" placeholder={uiText("搜索组件、标签或交互")} aria-label={uiText("搜索组件")} value={query} onChange={e => setQuery(e.target.value)}
@@ -215,6 +215,7 @@ export function HomePage() {
             options={SORTS.map(option => ({ ...option, label: uiText(option.label) }))} filter icon={<ArrowDownUp size={14} />} />
           </div>
         </div>
+        <Pagination page={page} pages={pages} loading={loading} onChange={changePage} />
       </div>
       {active.length > 0 && <div className="active-filters">
         {active.map(f => <button key={f.key} className="active-chip" aria-label={uiText("移除筛选：{{value0}}", {value0: f.label})} onClick={f.clear}>{f.label}<X size={12} /></button>)}
@@ -225,7 +226,7 @@ export function HomePage() {
         <span><strong>{uiText("列表未更新")}</strong>{error}</span>
         <button type="button" className="btn btn-sm btn-quiet" onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</button>
       </div>}
-      <section ref={results} className="results" aria-label={uiText("组件")} aria-busy={loading}>
+      <section className="results" aria-label={uiText("组件")} aria-busy={loading}>
         {error && !data ? <div className="empty" role="alert"><p>{error}</p><button className="btn" onClick={() => setRetry(value => value + 1)}>{uiText("重试")}</button></div>
           : !data ? <div className="grid">{[0, 1, 2].map(i => <div key={i} className="card card-skeleton"><div className="card-stage" /></div>)}</div>
           : !info?.assetCount ? <div className="empty"><p className="empty-title">{uiText("开始你的组件收藏")}</p><div className="empty-actions">
@@ -234,7 +235,6 @@ export function HomePage() {
           : !items.length ? <div className="empty"><p className="empty-title">{uiText("没有匹配的组件")}</p><button className="btn" onClick={clear}>{uiText("清除筛选")}</button></div>
           : <AssetGrid key={info.libraryId} items={items}>{a => <AssetCard asset={a} live={liveId === a.id} onLiveChange={setLiveId} locale={locale} tagLabels={tagLabels} activeTags={tagSet} selecting={selecting} selected={selected.has(a.id)} onToggleSelect={toggleSelect} onFavorite={onFavorite} onTag={toggleTag} onDelete={askDelete} />}</AssetGrid>}
       </section>
-      <Pagination page={page} pages={pages} loading={loading} onChange={changePage} />
       {selecting && <div className="select-bar batch-bar" aria-label={uiText("批量管理")}>
         <span>{uiText("已选 ")}{selected.size}</span><button className="btn btn-quiet btn-sm" onClick={() => setSelected(prev => { const next = new Set(prev); for (const a of items) pageSelected ? next.delete(a.id) : next.add(a.id); return next; })}>{pageSelected ? uiText("取消本页") : uiText("选择本页")}</button>
         <button className="icon-btn" title={uiText("导出所选")} aria-label={uiText("导出所选")} disabled={!selected.size || busy} onClick={exportSelected}><Download size={16} /></button>

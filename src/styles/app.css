@@ -254,7 +254,7 @@ input:is([type=checkbox], [type=radio]):focus-visible { outline: 2px solid var(-
 .copy-label-size { visibility: hidden; }
 
 /* ---------- 首页 ---------- */
-.home { max-width: calc(var(--page) + 48px); margin: 0 auto; padding: 20px 24px 48px; }
+.home { max-width: calc(var(--page) + 48px); margin: 0 auto; padding: 20px 24px 48px; scroll-margin-top: var(--topbar); }
 .browse-progress { height: 2px; margin: 0 0 10px; overflow: hidden; opacity: 0; transition: opacity 160ms ease; }
 .browse-progress[data-busy=true] { opacity: 1; transition-delay: 250ms; }
 .browse-progress span { display: block; width: 28%; height: 100%; background: var(--fg-3); opacity: .45; }
@@ -1268,6 +1268,12 @@ button.text-link { padding: 0; border: 0; background: none; cursor: pointer; }
 .pagination-input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .pagination-input[readonly] { color: var(--fg-3); }
 .pagination-total { color: var(--fg-2); white-space: nowrap; }
+.filter-bar > .pagination { flex: none; gap: 8px; margin: 0 0 0 12px; }
+@media (max-width: 760px) {
+  .home { scroll-margin-top: 0; }
+  .filter-bar { top: 0; }
+  .filter-bar > .pagination { flex-basis: 100%; margin: 0; padding-top: 4px; border-top: 1px solid var(--line); }
+}
 .batch-bar { font-size: 13px; }
 .transfer-import, .transfer-export { gap: 16px; }
 .transfer-import { container-type: inline-size; }

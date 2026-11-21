@@ -106,7 +106,22 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(frame.getByRole('button', { name: '2', exact: true })).toBeVisible();
   await expect(frame.locator('html')).not.toHaveAttribute('data-paused', '');
 
-  await page.getByRole('button', { name: '下一页', exact: true }).scrollIntoViewIfNeeded();
+  const pagination = page.getByRole('navigation', { name: '分页', exact: true });
+  const expectPaginationReachable = async () => {
+    const box = await pagination.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    const next = pagination.getByRole('button', { name: '下一页', exact: true });
+    await next.click({ trial: true });
+  };
+  await expectPaginationReachable();
+  await page.mouse.wheel(0, 1200);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
+  await expectPaginationReachable();
+  await page.screenshot({ path: 'test-results/browse-pagination-desktop-middle.png' });
+  await page.locator('.card').last().scrollIntoViewIfNeeded();
+  await expectPaginationReachable();
   await expect.poll(async () => {
     const frame = first.locator('iframe');
     if (!await frame.count()) return true;
@@ -124,6 +139,9 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(page.locator('.card-title').first()).toHaveText('Component 384');
   await expect(page).toHaveURL(/[?&]page=17(?:&|$)/);
   await expect(pageNumber).toHaveValue('17');
+  const controls = await page.locator('.filter-bar').boundingBox();
+  const results = await page.locator('.results').boundingBox();
+  expect(results!.y).toBeGreaterThanOrEqual(controls!.y + controls!.height);
   const beforeCancel = listRequests;
   await pageNumber.fill('8');
   await pageNumber.press('Escape');
@@ -134,6 +152,14 @@ test('one thousand records keep page and live-document counts bounded', async ({
   expect(listRequests).toBe(beforeCancel);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expectPaginationReachable();
+  await page.mouse.wheel(0, 1600);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
+  await expectPaginationReachable();
+  await page.screenshot({ path: 'test-results/browse-pagination-phone-middle.png' });
+  const widths = await page.evaluate(() => ({ layout: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
+  expect(widths.content).toBeLessThanOrEqual(widths.layout);
   await pageNumber.fill('999');
   await pageNumber.press('Enter');
   await expect(page.locator('.card-title').first()).toHaveText('Component 984');
