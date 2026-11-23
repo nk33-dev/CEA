@@ -3,6 +3,31 @@ import { htmlPlayPage } from '../../server/play.ts';
 import { BACKGROUND_RELEASE_MS } from '../../src/components/PreviewActivity.tsx';
 import { mockLibrary } from './fixtures/mockLibrary.ts';
 
+test('covered frames stay renderable while warming and accept the first hover and click', async ({ page }) => {
+  const { assets } = await mockLibrary(page);
+  for (const asset of assets.values()) asset.cover = `assets/${asset.id}/cover.png`;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/play/**', async route => { await gate; await route.fallback(); });
+  await page.goto('/');
+  await page.mouse.move(0, 0);
+  const card = page.locator('.card').first();
+  await expect(card.locator('iframe')).toHaveCount(1);
+  await expect(card.locator('.card-cover')).toBeVisible();
+  await expect(card.locator('iframe')).toHaveCSS('visibility', 'visible');
+  const hit = await card.locator('.card-stage').evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.classList.contains('card-cover');
+  });
+  expect(hit).toBe(true);
+  release();
+  await card.locator('.card-stage').hover();
+  const frame = card.frameLocator('iframe');
+  await frame.getByRole('button', { name: '0', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '1', exact: true })).toBeVisible();
+  await expect(frame.locator('html')).not.toHaveAttribute('data-paused', '');
+});
+
 for (const width of [1440, 390]) {
   test(`idle and interactive thumbnails share one sharp frame at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });

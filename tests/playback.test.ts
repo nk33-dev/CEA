@@ -34,7 +34,8 @@ function harness(page = false) {
   };
   const animations: ReturnType<typeof animation>[] = [];
   const players: ReturnType<typeof media>[] = [];
-  const listeners = new Map<string, (event?: { isTrusted: boolean }) => void>();
+  type InputEvent = { isTrusted: boolean; type?: string; pointerType?: string; relatedTarget?: unknown; target?: unknown };
+  const listeners = new Map<string, (event?: InputEvent) => void>();
   const messages = new Map<string, (event: unknown) => void>();
   const attributes = new Set<string>();
   const window = {
@@ -59,10 +60,10 @@ function harness(page = false) {
     querySelector: vi.fn((_selector: string): unknown => null),
     getAnimations: () => animations,
     querySelectorAll: () => players,
-    addEventListener: (type: string, callback: (event?: { isTrusted: boolean }) => void) => {
+    addEventListener: (type: string, callback: (event?: InputEvent) => void) => {
       const previous = listeners.get(type);
       listeners.set(type, event => {
-        const payload = { target: { closest: () => null }, ...event } as { isTrusted: boolean };
+        const payload = { type, target: { closest: () => null }, ...event } as InputEvent;
         previous?.(payload);
         callback(payload);
       });
@@ -401,6 +402,26 @@ describe('预览播放控制', () => {
     expect(h.window.parent.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'cea:resume' }, '*');
     h.listeners.get('click')?.({ isTrusted: true });
     expect(h.window.parent.postMessage).toHaveBeenCalledOnce();
+  });
+
+  it('真实鼠标进入 iframe 时恢复播放并报告离开，不依赖外层收到悬停事件', () => {
+    const h = harness();
+    h.control.setActive(false, true);
+    h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
+    expect(h.attributes.has('data-paused')).toBe(false);
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:hover', value: true }, '*');
+    h.listeners.get('pointerout')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:hover', value: false }, '*');
+  });
+
+  it('触屏、内部节点间移动和合成悬停不会启动播放', () => {
+    const h = harness();
+    h.control.setActive(false, true);
+    h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'touch', relatedTarget: null });
+    h.listeners.get('pointerover')?.({ isTrusted: false, pointerType: 'mouse', relatedTarget: null });
+    h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: {} });
+    expect(h.attributes.has('data-paused')).toBe(true);
+    expect(h.window.parent.postMessage).not.toHaveBeenCalled();
   });
 
   it('后台预览和脚本合成事件不会恢复播放', () => {

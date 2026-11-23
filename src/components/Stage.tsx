@@ -28,6 +28,7 @@ interface StageProps {
   inert?: boolean;
   active?: boolean;
   onResume?: () => void;
+  onHoverChange?: (hovered: boolean) => void;
   zoom?: number;
   onReady?: () => void;
   onError?: () => void;
@@ -48,7 +49,7 @@ interface StageProps {
  * 所有素材都通过统一的 /play/<id>/<framework>/ 地址播放，HTML、React、Vue 一样。
  * iframe 在沙箱里运行，主题通过 postMessage 切换，不用重新加载。
  */
-export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onReady, onError, onWarm, onResources, onBounds, visibleArea, loadingIndicator = true, errorIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
+export const Stage = memo(function Stage({ assetId, framework, src, title, theme = 'light', componentTheme = 'original', reloadKey = 0, version, className, inert, active = true, onResume, onHoverChange, onReady, onError, onWarm, onResources, onBounds, visibleArea, loadingIndicator = true, errorIndicator = true, device = 'desktop', framing = 'content', thumbnail = false }: StageProps) {
   useUi();
   const [initialTheme] = useState(theme);
   const [initialComponentTheme] = useState(componentTheme);
@@ -68,11 +69,11 @@ export const Stage = memo(function Stage({ assetId, framework, src, title, theme
     <div className="stage-host" aria-busy={pending && failed !== request} data-theme={theme}>
       {displayed && <StageFrame key={displayed.request} src={displayed.url} title={title} className={className}
         theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={pending ? false : active} inert={pending || inert} standby={pending} onResume={pending ? undefined : onResume} onBounds={pending ? undefined : onBounds}
-        onWarm={pending ? undefined : onWarm} onResources={pending ? undefined : onResources}
+        onWarm={pending ? undefined : onWarm} onResources={pending ? undefined : onResources} onHoverChange={pending ? undefined : onHoverChange}
         onReady={pending ? undefined : () => { setFailed(null); onReady?.(); }}
         onError={pending ? undefined : () => { setFailed(request); onError?.(); }} />}
       {pending && <StageFrame key={request} src={url} title={title} className={className}
-        theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={active} inert={inert} onResume={onResume}
+        theme={theme} componentTheme={componentTheme} device={device} framing={framing} visibleArea={visibleArea} active={active} inert={inert} onResume={onResume} onHoverChange={onHoverChange}
         onReady={() => { setFailed(null); setDisplayed({ request, url }); onReady?.(); }}
         onError={() => { setFailed(request); onError?.(); }} onWarm={onWarm} onResources={onResources} onBounds={onBounds} />}
       {loadingIndicator && <PreviewLoading busy={pending && failed !== request} />}
@@ -81,7 +82,7 @@ export const Stage = memo(function Stage({ assetId, framework, src, title, theme
   );
 });
 
-function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, className, onReady, onError, onWarm, onResources, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
+function StageFrame({ src, title, theme, componentTheme, device, framing, active, inert, standby, onResume, onHoverChange, className, onReady, onError, onWarm, onResources, onBounds, visibleArea }: StageProps & { standby?: boolean }) {
   useUi();
   const ref = useRef<HTMLIFrameElement>(null);
   const hasRuntime = useRef(false);
@@ -89,8 +90,8 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
   const errorReported = useRef(false);
   const fallback = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
-  const callbacks = useRef({ onReady, onResume, onBounds, onError, onWarm, onResources });
-  callbacks.current = { onReady, onResume, onBounds, onError, onWarm, onResources };
+  const callbacks = useRef({ onReady, onResume, onHoverChange, onBounds, onError, onWarm, onResources });
+  callbacks.current = { onReady, onResume, onHoverChange, onBounds, onError, onWarm, onResources };
   useEffect(() => {
     const fail = () => {
       if (errorReported.current) return;
@@ -135,6 +136,10 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
         callbacks.current.onReady?.();
       }
       if (event.data?.type === 'cea:resume') callbacks.current.onResume?.();
+      if (event.data?.type === 'cea:hover' && typeof event.data.value === 'boolean') {
+        if (event.data.value) window.dispatchEvent(new Event('cea:preview-hover'));
+        callbacks.current.onHoverChange?.(event.data.value);
+      }
       if (event.data?.type === 'cea:bounds') callbacks.current.onBounds?.(event.data.value ?? null, event.data.layout);
     };
     window.addEventListener('message', receive);

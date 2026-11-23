@@ -136,4 +136,16 @@ export const PLAYBACK_SCRIPT = String.raw`
   ['pointerdown', 'keydown', 'click'].forEach(function(type) {
     document.addEventListener(type, resumeForInteraction, true);
   });
+  function resumeForHover(event){
+    if(!resumeOnInteraction||!event.isTrusted||event.pointerType!=='mouse')return;
+    if(event.type==='pointerover'?event.relatedTarget!==null:!previewPaused)return;
+    setActive(true);
+    window.parent.postMessage({type:'cea:hover',value:true},'*');
+  }
+  document.addEventListener('pointerover',resumeForHover,true);
+  document.addEventListener('pointermove',resumeForHover,true);
+  document.addEventListener('pointerout',function(event){
+    if(!resumeOnInteraction||!event.isTrusted||event.pointerType!=='mouse'||event.relatedTarget!==null)return;
+    window.parent.postMessage({type:'cea:hover',value:false},'*');
+  },true);
 `;

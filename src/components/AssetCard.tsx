@@ -64,6 +64,26 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
     return () => activity?.activate(asset.id, false);
   }, [activity, asset.id, active]);
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
+  const hover = useCallback((value: boolean) => {
+    clearTimeout(leaveTimer.current);
+    if (value) { setHovered(true); setPaused(false); }
+    else leaveTimer.current = setTimeout(() => { setHovered(false); setFocused(false); }, 180);
+  }, []);
+  useEffect(() => {
+    if (!hovered && !focused) return;
+    const leave = () => {
+      if (ref.current?.matches(':hover')) return;
+      clearTimeout(leaveTimer.current);
+      setHovered(false);
+      setFocused(false);
+    };
+    document.addEventListener('pointermove', leave);
+    window.addEventListener('cea:preview-hover', leave);
+    return () => {
+      document.removeEventListener('pointermove', leave);
+      window.removeEventListener('cea:preview-hover', leave);
+    };
+  }, [hovered, focused, ref]);
   const start = () => { setPaused(false); onLiveChange(asset.id); };
   const summary = translatedValue(asset.summaries, locale, text => text);
   const extraTags = asset.tags.length - MAX_TAGS;
@@ -89,14 +109,14 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   return (
     <article ref={visibleRef} data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
       <div className="card-stage" ref={ref}
-        onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setHovered(true); setPaused(false); } }}
-        onPointerLeave={() => { leaveTimer.current = setTimeout(() => { setHovered(false); setFocused(false); }, 180); }}
+        onPointerEnter={e => { if (e.pointerType === 'mouse') hover(true); }}
+        onPointerLeave={() => hover(false)}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
         {asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
           style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
           src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
         {mounted && <FitStage assetId={asset.id} framework={asset.frameworks[0]} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
-          active={active} onResume={resume} reloadKey={replay}
+          active={active} onResume={resume} onHoverChange={hover} reloadKey={replay}
           loadingIndicator={!asset.cover || coverFailed || wantsLive}
           onWarm={() => activity?.ready(asset.id)}
           onResources={contexts => activity?.resources(asset.id, contexts)}
