@@ -12,7 +12,6 @@ export default defineConfig({
     host: '127.0.0.1',
     proxy: { '/api': API, '/files': API, '/play': API },
   },
-  // Sandpack 单独成块且按需加载，体积是库本身的
   build: { chunkSizeWarningLimit: 700 },
   test: { include: ['tests/**/*.test.ts'], environment: 'node' },
 });
