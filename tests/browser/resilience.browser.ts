@@ -65,7 +65,10 @@ test('replaying a cached draft renews the server URL', async ({ page }) => {
   const count = writes.filter(value => value === 'POST /api/play/draft').length;
   await page.getByRole('button', { name: '重播', exact: true }).click();
   await expect.poll(() => writes.filter(value => value === 'POST /api/play/draft').length).toBe(count + 1);
-  await expect(page.locator('iframe')).not.toHaveAttribute('src', before!);
+  await expect.poll(async () => {
+    const frames = await page.locator('iframe').evaluateAll(elements => elements.map(frame => frame.getAttribute('src')));
+    return frames.length === 1 && frames[0] !== before;
+  }).toBe(true);
   await expect(page.locator('.editor-preview .stage-host')).toHaveAttribute('aria-busy', 'false');
 });
 

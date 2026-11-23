@@ -74,6 +74,7 @@ export function createActivity() {
     retain(id: string) {
       if (!visible) return;
       waiting.delete(id);
+      warming.delete(id);
       retain(id);
       scheduleWarm();
     },
@@ -81,14 +82,15 @@ export function createActivity() {
       if (!retained.includes(id)) { waiting.add(id); scheduleWarm(); }
       return () => {
         waiting.delete(id);
-        if (warming.delete(id)) {
-          gpu.delete(id);
-          retained = retained.filter(value => value !== id);
-          publish();
-          scheduleWarm();
-        }
         if (!waiting.size && warmTimer) { clearTimeout(warmTimer); warmTimer = undefined; }
       };
+    },
+    cancelWarm(id: string) {
+      if (!warming.delete(id)) return;
+      gpu.delete(id);
+      retained = retained.filter(value => value !== id);
+      publish();
+      scheduleWarm();
     },
     ready(id: string) {
       warming.delete(id);
@@ -160,6 +162,9 @@ export function useRetainedPreview(id: string, requested: boolean, warm = false)
   useEffect(() => {
     if (visible && warm && !requested) return activity?.prewarm(id);
   }, [activity, id, warm, requested, visible]);
+  useEffect(() => {
+    if (!warm && !requested) activity?.cancelWarm(id);
+  }, [activity, id, warm, requested]);
   useEffect(() => () => activity?.release(id), [activity, id]);
   return activity ? retained.includes(id) : requested;
 }

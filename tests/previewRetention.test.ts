@@ -104,6 +104,7 @@ describe('列表预览预算', () => {
     const cancelNext = activity.prewarm('next');
     vi.advanceTimersByTime(120);
     cancelNext();
+    activity.cancelWarm('next');
     expect(activity.resident()).toEqual([]);
     activity.ready('next');
     const cancelVisible = activity.prewarm('visible');
@@ -112,5 +113,23 @@ describe('列表预览预算', () => {
     activity.ready('visible');
     cancelVisible();
     expect(activity.resident()).toEqual(['visible']);
+  });
+
+  it('预热转为主动播放时保留 GPU 计数，不会被旧预热清理挤掉', () => {
+    vi.useFakeTimers();
+    const activity = createActivity();
+    const cancel = activity.prewarm('playing');
+    vi.advanceTimersByTime(120);
+    activity.resources('playing', 1);
+    activity.retain('playing');
+    activity.activate('playing', true);
+    cancel();
+    activity.cancelWarm('playing');
+    for (let index = 0; index < MAX_GPU_CONTEXTS; index++) {
+      activity.retain(`gpu-${index}`);
+      activity.resources(`gpu-${index}`, 1);
+    }
+    expect(activity.resident()).toContain('playing');
+    expect(activity.resident()).toHaveLength(MAX_GPU_CONTEXTS);
   });
 });
