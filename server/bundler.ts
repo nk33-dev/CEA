@@ -7,6 +7,7 @@ import postcss from 'postcss';
 import valueParser from 'postcss-value-parser';
 import type { CodeFile, ResourceFile } from '../shared/types.ts';
 import { normalizeRelPath } from '../shared/paths.ts';
+import { BoundedCache } from './cache.ts';
 
 /**
  * React / Vue 实现在本地打包成一个脚本，和 HTML 实现一样通过 /play/<id>/<framework>/ 播放，
@@ -41,8 +42,21 @@ export interface BundleResult {
   error: string | null;
 }
 
-const cache = new Map<string, BundleResult>();
+const cache = new BoundedCache<BundleResult>({ count: 50, bytes: 64 * 1024 * 1024, ttl: 30 * 60_000 });
 const inFlight = new Map<string, Promise<BundleResult>>();
+const compileQueue: (() => void)[] = [];
+let compiling = 0;
+
+async function scheduledCompile(run: () => Promise<BundleResult>): Promise<BundleResult> {
+  if (compiling >= 2) await new Promise<void>(resolve => compileQueue.push(resolve));
+  else compiling++;
+  try { return await run(); }
+  finally {
+    const next = compileQueue.shift();
+    if (next) next();
+    else compiling--;
+  }
+}
 
 const injectCss = (css: string) => `{const s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.append(s);}`;
 
@@ -126,9 +140,9 @@ export function bundle(framework: string, _key: string, code: CodeFile[], entry:
   if (hit) return Promise.resolve(hit);
   const pending = inFlight.get(key);
   if (pending) return pending;
-  const task = compileBundle(framework, code, entry, resources, dependencyRoot).then(result => {
-    if (!result.error) cache.set(key, result);
-    if (cache.size > 50) cache.delete(cache.keys().next().value!);
+  if (inFlight.size >= 64) return Promise.resolve({ code: '', error: '预览编译繁忙，请稍后重试' });
+  const task = scheduledCompile(() => compileBundle(framework, code, entry, resources, dependencyRoot)).then(result => {
+    if (!result.error) cache.set(key, result, Buffer.byteLength(result.code, 'utf8') * 2);
     return result;
   }).finally(() => inFlight.delete(key));
   inFlight.set(key, task);

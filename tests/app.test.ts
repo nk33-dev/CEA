@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from '../server/app.ts';
+import { createApp, type AppState } from '../server/app.ts';
 import { Library } from '../server/library.ts';
 import { seedTestLibrary } from './helpers/library.ts';
 import { listenForFetch } from './helpers/http.ts';
@@ -12,12 +12,14 @@ let dir: string;
 let lib: Library;
 let server: Server;
 let base: string;
+let state: AppState;
 
 beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cea-http-test-'));
   lib = Library.open(dir);
   seedTestLibrary(lib);
-  ({ server, base } = await listenForFetch(createApp({ lib })));
+  state = { lib };
+  ({ server, base } = await listenForFetch(createApp(state)));
 });
 
 afterEach(async () => {
@@ -38,6 +40,39 @@ function request(route: string, method = 'GET', body?: unknown, trusted = true) 
 }
 
 describe('按需读取预览', () => {
+  it('生产资源使用长期缓存，页面入口重新验证，失效分块不会误返回 HTML', async () => {
+    const dist = path.join(dir, 'dist');
+    fs.mkdirSync(path.join(dist, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>Fixture</title>');
+    fs.writeFileSync(path.join(dist, 'assets', 'app-test.js'), 'window.fixture=true;');
+    const production = await listenForFetch(createApp({ lib }, { distDir: dist }));
+    try {
+      const asset = await fetch(production.base + '/assets/app-test.js');
+      expect(asset.headers.get('cache-control')).toContain('immutable');
+      expect(asset.headers.get('cache-control')).toContain('max-age=31536000');
+      expect((await fetch(production.base + '/a/example')).headers.get('cache-control')).toBe('no-cache');
+      const missing = await fetch(production.base + '/assets/missing.js');
+      expect(missing.status).toBe(404);
+      expect(missing.headers.get('content-type')).not.toContain('text/html');
+    } finally { await new Promise<void>(resolve => production.server.close(() => resolve())); }
+  });
+  it('草稿过期后拒绝播放和资源请求，切换库也不能继续使用旧草稿', async () => {
+    const variant = lib.getAsset('weather-day-switcher').variants[0];
+    const draft = await (await request('/api/play/draft', 'POST', { ...variant })).json();
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 11 * 60_000);
+    try {
+      expect((await request(draft.url)).status).toBe(404);
+      expect((await request(`${draft.url}${variant.entry}`)).status).toBe(404);
+    } finally { clock.mockRestore(); }
+    const fresh = await (await request('/api/play/draft', 'POST', { ...variant })).json();
+    const other = Library.open(path.join(dir, 'other'));
+    try {
+      state.lib = other;
+      expect((await request(fresh.url)).status).toBe(404);
+      expect((await request(`${fresh.url}${variant.entry}`)).status).toBe(404);
+    } finally { state.lib = lib; other.close(); }
+  });
   it('已保存素材和草稿可读取自己目录内的模块与 SVG，其他资源不可访问', async () => {
     const detail = lib.getAsset('weather-day-switcher');
     const variant = detail.variants.find(variant => variant.framework === 'html')!;
@@ -148,6 +183,23 @@ describe('标签接口', () => {
 });
 
 describe('导入导出接口', () => {
+  it('导入预览令牌不能过期使用，也不能跨素材库使用', async () => {
+    const bytes = await (await request('/api/export', 'POST', {})).arrayBuffer();
+    const preview = async () => (await fetch(base + '/api/import/preview', {
+      method: 'POST', headers: { 'x-cea-client': '1' }, body: bytes,
+    })).json();
+    const first = await preview();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31 * 60_000);
+    try { expect((await request('/api/import', 'POST', { token: first.token })).status).toBe(400); }
+    finally { clock.mockRestore(); }
+    const fresh = await preview();
+    const other = Library.open(path.join(dir, 'other'));
+    try {
+      state.lib = other;
+      expect((await request('/api/import', 'POST', { token: fresh.token })).status).toBe(400);
+      expect(other.repo.countAssets()).toBe(0);
+    } finally { state.lib = lib; other.close(); }
+  });
   it('导出后可预览，合并为副本并使导入令牌失效', async () => {
     const exported = await request('/api/export', 'POST', {});
     expect(exported.headers.get('content-type')).toContain('application/zip');

@@ -15,6 +15,7 @@ import { folderFiles, parseFolderFiles, readFolder, writeFolder, type FolderPack
 import { exportLibrary, exportReferencePackage, importPackage, isBackupPackage, parsePackageFiles, previewImport, unzipSafe, type ParsedPackage } from './transfer/zip.ts';
 import { zipSync } from 'fflate';
 import { parseThemeContract } from '../shared/theme.ts';
+import { BoundedCache } from './cache.ts';
 
 export interface AppState {
   lib: Library | null;
@@ -82,15 +83,16 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
 
   const json = express.json({ limit: '8mb' });
   const raw = express.raw({ type: () => true, limit: '2gb' });
-  const pendingImports = new Map<string, { pkg: ParsedPackage; at: number }>();
+  const pendingImports = new BoundedCache<{ pkg: ParsedPackage; library: Library | null }>({ count: 4, bytes: 512 * 1024 * 1024, ttl: 30 * 60_000 });
+  const drafts = new BoundedCache<{ title: string; variant: Variant; resourceAssetId?: string; library: Library | null }>({ count: 64, bytes: 64 * 1024 * 1024, ttl: 10 * 60_000 });
+  const clearSessions = () => { pendingImports.clear(); drafts.clear(); };
 
   /** 备份包按原样恢复；其他 ZIP 和文件夹按素材文件夹格式解析 */
   const stage = (files: Record<string, Uint8Array>, name: string) => {
     const pkg: ParsedPackage | FolderPackage = isBackupPackage(files) ? parsePackageFiles(files) : parseFolderFiles(files, name);
     const token = crypto.randomUUID();
-    const cutoff = Date.now() - 30 * 60_000;
-    for (const [k, v] of pendingImports) if (v.at < cutoff) pendingImports.delete(k);
-    pendingImports.set(token, { pkg, at: Date.now() });
+    const bytes = Object.values(pkg.files).reduce((sum, file) => sum + file.byteLength, 0) + Buffer.byteLength(JSON.stringify(pkg.assets), 'utf8') * 2;
+    if (!pendingImports.set(token, { pkg, library: current.lib }, bytes)) throw new HttpError(413, '导入文件太大，请分批导入');
     const problems = (pkg as Partial<FolderPackage>).problems ?? [];
     return { token, preview: { ...previewImport(state.lib, pkg), source: pkg.formatVersion ? 'backup' as const : 'folder' as const, problems } };
   };
@@ -132,6 +134,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
       throw e;
     }
     current.lib?.close();
+    clearSessions();
     state.lib = next;
     res.json(libraryInfo());
   }));
@@ -229,10 +232,10 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   }));
   app.post('/api/categories/order', json, asyncRoute((req, res) => {
     const ids = req.body?.ids;
-    const categories = state.lib.repo.listCategories();
-    if (!Array.isArray(ids) || ids.length !== categories.length || new Set(ids).size !== ids.length || ids.some(id => !categories.some(c => c.id === id))) throw badRequest('分类顺序已变化，请刷新后重试');
+    const categories = new Map(state.lib.repo.listCategories().map(category => [category.id, category]));
+    if (!Array.isArray(ids) || ids.length !== categories.size || new Set(ids).size !== ids.length || ids.some(id => !categories.has(id))) throw badRequest('分类顺序已变化，请刷新后重试');
     state.lib.repo.transaction(() => ids.forEach((id: string, sort: number) => {
-      state.lib.repo.updateCategory(id, categories.find(c => c.id === id)!.name, sort);
+      state.lib.repo.updateCategory(id, categories.get(id)!.name, sort);
     }));
     res.status(204).end();
   }));
@@ -308,7 +311,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
 
   app.post('/api/import', json, asyncRoute((req, res) => {
     const pending = pendingImports.get(String(req.body?.token ?? ''));
-    if (!pending) throw badRequest('导入文件已过期，请重新选择');
+    if (!pending || pending.library !== current.lib) throw badRequest('导入文件已过期，请重新选择');
     const duplicates = (['skip', 'overwrite', 'copy'] as DuplicateStrategy[]).find(s => s === req.body?.duplicates) ?? 'skip';
     if (req.body?.mode === 'new') {
       const target = String(req.body?.targetPath ?? '').trim();
@@ -323,9 +326,10 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
         throw e;
       }
       if (req.body?.switchTo !== false) {
+        try { rememberLibrary(lib.root); } catch (e) { lib.close(); throw e; }
         state.lib.close();
+        clearSessions();
         state.lib = lib;
-        rememberLibrary(lib.root);
       } else lib.close();
       pendingImports.delete(String(req.body.token));
       res.json(result);
@@ -366,7 +370,6 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   });
 
   // 编辑页的草稿预览：先 POST 代码拿到一次性地址，再在 iframe 里打开
-  const drafts = new Map<string, { title: string; variant: Variant; resourceAssetId?: string; at: number }>();
   app.post('/api/play/draft', json, asyncRoute((req, res) => {
     const info = frameworkInfo(String(req.body?.framework ?? ''));
     if (!info) throw badRequest('不支持的框架');
@@ -378,21 +381,20 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
       : [];
     const entry = info.fixed ? info.entry : normalizeRelPath(String(req.body?.entry ?? '')) ?? info.entry;
     const token = crypto.randomUUID();
-    const cutoff = Date.now() - 10 * 60_000;
-    for (const [k, v] of drafts) if (v.at < cutoff) drafts.delete(k);
     let theme: Variant['theme'];
     try { theme = parseThemeContract(req.body?.theme); } catch (e) { throw badRequest((e as Error).message); }
     const resourceAssetId = typeof req.body?.assetId === 'string' ? req.body.assetId : undefined;
     const saved = resourceAssetId && state.lib.repo.getVariants(resourceAssetId).some(v => v.framework === info.id)
       ? state.lib.getPlayback(resourceAssetId, info.id).variant : undefined;
     const previewEntry = Object.hasOwn(req.body, 'previewEntry') ? normalizeRelPath(String(req.body.previewEntry ?? '')) ?? undefined : saved?.previewEntry;
-    drafts.set(token, { title: String(req.body?.title ?? '草稿'), resourceAssetId,
-      variant: { framework: info.id, entry, ...(previewEntry ? { previewEntry } : {}), dependencies: {}, files, ...(saved?.resources?.length ? { resources: saved.resources } : {}), ...(theme ? { theme } : {}) }, at: Date.now() });
+    const draft = { title: String(req.body?.title ?? '草稿'), resourceAssetId, library: current.lib,
+      variant: { framework: info.id, entry, ...(previewEntry ? { previewEntry } : {}), dependencies: {}, files, ...(saved?.resources?.length ? { resources: saved.resources } : {}), ...(theme ? { theme } : {}) } };
+    drafts.set(token, draft, Buffer.byteLength(JSON.stringify(draft.variant), 'utf8') * 2 + draft.title.length * 2);
     res.json({ url: `/play/~draft/${token}/` });
   }));
   app.get('/play/~draft/:token', asyncRoute(async (req, res) => {
     const draft = drafts.get(param(req, 'token'));
-    if (!draft) {
+    if (!draft || draft.library !== current.lib) {
       res.status(404).type('text/plain').send('草稿预览已过期');
       return;
     }
@@ -410,7 +412,7 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   };
   app.get('/play/~draft/:token/*resource', asyncRoute((req, res) => {
     const draft = drafts.get(param(req, 'token'));
-    if (!draft) throw notFound('草稿预览已过期');
+    if (!draft || draft.library !== current.lib) throw notFound('草稿预览已过期');
     const resource = param(req, 'resource');
     if (draft.resourceAssetId && draft.variant.resources?.some(f => f.path === resource)) {
       const file = state.lib.getPlaybackFile(draft.resourceAssetId, draft.variant.framework, resource);
@@ -436,11 +438,13 @@ export function createApp(current: AppState, options: { distDir?: string } = {})
   });
 
   if (options.distDir && fs.existsSync(options.distDir)) {
-    app.use(express.static(options.distDir));
-    app.get('/*any', (_req, res) => res.sendFile(path.join(options.distDir!, 'index.html')));
+    app.use('/assets', express.static(path.join(options.distDir, 'assets'), { maxAge: '1y', immutable: true, fallthrough: false }));
+    app.use(express.static(options.distDir, { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') }));
+    app.get('/*any', (_req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(options.distDir!, 'index.html')); });
   }
 
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) { next(err); return; }
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
       return;
