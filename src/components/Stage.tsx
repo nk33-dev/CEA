@@ -98,7 +98,20 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
       readyReported.current = false;
       callbacks.current.onError?.();
     };
-    const deadline = setTimeout(() => { if (!readyReported.current) fail(); }, 12000);
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    let remaining = 12000;
+    let started = performance.now();
+    const syncDeadline = () => {
+      if (deadline) remaining = Math.max(0, remaining - (performance.now() - started));
+      clearTimeout(deadline);
+      deadline = undefined;
+      if (!document.hidden && !readyReported.current && !errorReported.current) {
+        started = performance.now();
+        deadline = setTimeout(fail, remaining);
+      }
+    };
+    syncDeadline();
+    document.addEventListener('visibilitychange', syncDeadline);
     const receive = (event: MessageEvent) => {
       if (event.source !== ref.current?.contentWindow) return;
       if (event.data?.type === 'cea:boot') hasRuntime.current = true;
@@ -127,6 +140,7 @@ function StageFrame({ src, title, theme, componentTheme, device, framing, active
     window.addEventListener('message', receive);
     return () => {
       window.removeEventListener('message', receive);
+      document.removeEventListener('visibilitychange', syncDeadline);
       clearTimeout(fallback.current);
       clearTimeout(deadline);
     };
@@ -275,6 +289,7 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
   const receiveBounds = (next: PreviewBounds | null) => setBounds(previous =>
     previous?.x === next?.x && previous?.y === next?.y && previous?.width === next?.width && previous?.height === next?.height ? previous : next);
   const [ready, setReady] = useState(false);
+  const [warm, setWarm] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -295,16 +310,19 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
     x: -t.x / t.scale, y: -t.y / t.scale, width: box.width / t.scale, height: box.height / t.scale,
   } : null, [t?.x, t?.y, t?.scale, box?.width, box?.height]);
   return (
-    <div ref={ref} className="fit-stage" data-ready={ready || undefined}>
+    <div ref={ref} className="fit-stage" data-ready={ready || undefined} data-display={ready && (warm || props.active) || undefined}>
       {t && (
-        <div className="fit-stage-inner" data-measured={bounds ? '' : undefined} aria-hidden={!ready || undefined} inert={!ready}
+        <div className="fit-stage-inner" data-measured={bounds ? '' : undefined}
+          data-inset={kind === 'component' && bounds && bounds.x > 1 && bounds.y > 1 && bounds.x + bounds.width < view.width - 1 && bounds.y + bounds.height < view.height - 1 || undefined}
+          aria-hidden={!ready || undefined} inert={!ready}
           style={{ opacity: ready ? 1 : 0, width: view.width, height: view.height, transform: `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) scale(${t.scale})` }}>
           <Stage key={attempt} {...props} thumbnail visibleArea={visibleArea} loadingIndicator={false} errorIndicator={false} onBounds={receiveBounds}
+            onWarm={() => { setWarm(true); props.onWarm?.(); }}
             onError={() => { setFailed(true); props.onError?.(); }} onReady={() => { setFailed(false); setReady(true); props.onReady?.(); }} />
         </div>
       )}
       {!activity && <PreviewLoading busy={!ready && !failed} />}
-      {failed && <PreviewFailure onRetry={() => { setFailed(false); setReady(false); setAttempt(value => value + 1); }} />}
+      {failed && <PreviewFailure onRetry={() => { setFailed(false); setReady(false); setWarm(false); setAttempt(value => value + 1); }} />}
     </div>
   );
 }

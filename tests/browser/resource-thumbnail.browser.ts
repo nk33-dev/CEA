@@ -55,7 +55,7 @@ test('a high-density cover and its padded painted frame keep the same crop', asy
   await page.goto(`${base}/?q=Painted`);
   await page.mouse.move(0, 0);
   const card = page.locator('[data-asset-id="painted-frame"]');
-  await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   const stage = card.locator('.card-stage');
   const darkBounds = async () => {
     const png = await stage.screenshot({ scale: 'css' });
@@ -83,15 +83,15 @@ test('a high-density cover and its padded painted frame keep the same crop', asy
   for (const edge of ['left', 'right', 'top', 'bottom'] as const) expect(Math.abs(after[edge] - before[edge])).toBeLessThanOrEqual(1);
 });
 
-test('a cover hands off to the ready live frame without cross-fading different compositions', async ({ page }) => {
+test('a warmed frame replaces the cover before interaction and remains mounted', async ({ page }) => {
   await page.goto(base);
   await page.mouse.move(0, 0);
   const card = page.locator('[data-asset-id="covered-html"]');
   const cover = card.locator('.card-cover');
   await expect(cover).toBeVisible();
-  await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
-  await expect(cover).toBeVisible();
-  await expect(card.locator('.fit-stage')).toBeHidden();
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
+  await expect(cover).toBeHidden();
+  await expect(card.locator('.fit-stage')).toBeVisible();
   const existingFrame = await card.locator('iframe').getAttribute('src');
   await card.locator('.card-stage').hover();
   await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
@@ -158,13 +158,13 @@ test('list thumbnails resolve original resource files through the framework-less
 test('a declared canvas keeps its full framing without a scaled iframe edge line', async ({ page }) => {
   await page.goto(`${base}/?q=Bounded`);
   const card = page.locator('[data-asset-id="bounded-canvas"]');
-  await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   const target = card.frameLocator('iframe').locator('[data-preview-bounds]');
   const content = await target.evaluate(element => {
     const rect = element.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
   });
-  expect(content).toEqual({ x: 24, y: 24, width: 672, height: 600 });
+  expect(content).toEqual({ x: 24, y: 48, width: 672, height: 600 });
   const frame = (await card.locator('iframe').boundingBox())!;
   const stage = (await card.locator('.card-stage').boundingBox())!;
   const scale = frame.width / 720;

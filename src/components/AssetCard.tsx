@@ -51,7 +51,6 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const [replay, setReplay] = useState(0);
   const [saving, setSaving] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
-  const [visited, setVisited] = useState(false);
   const favoriteBusy = useRef(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(leaveTimer.current), []);
@@ -65,11 +64,10 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
     return () => activity?.activate(asset.id, false);
   }, [activity, asset.id, active]);
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
-  const start = () => { setVisited(true); setPaused(false); onLiveChange(asset.id); };
+  const start = () => { setPaused(false); onLiveChange(asset.id); };
   const summary = translatedValue(asset.summaries, locale, text => text);
   const extraTags = asset.tags.length - MAX_TAGS;
   const title = localizedTitle(asset, locale);
-  const showLive = !asset.cover || coverFailed || visited;
 
   const toggleFavorite = async () => {
     if (favoriteBusy.current) return;
@@ -90,10 +88,10 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
 
   return (
     <article ref={visibleRef} data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
-      <div className="card-stage" data-live={showLive || undefined} ref={ref}
-        onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setVisited(true); setHovered(true); setPaused(false); } }}
-        onPointerLeave={() => { leaveTimer.current = setTimeout(() => setHovered(false), 180); }}
-        onFocusCapture={() => { setVisited(true); setFocused(true); }} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
+      <div className="card-stage" ref={ref}
+        onPointerEnter={e => { if (e.pointerType === 'mouse') { clearTimeout(leaveTimer.current); setHovered(true); setPaused(false); } }}
+        onPointerLeave={() => { leaveTimer.current = setTimeout(() => { setHovered(false); setFocused(false); }, 180); }}
+        onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
         {asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
           style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
           src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}

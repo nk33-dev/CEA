@@ -41,6 +41,11 @@ function harness(page = false) {
     requestAnimationFrame: (callback: (time: number) => void) => { const id = ++sequence; queue.set(id, callback); return id; },
     cancelAnimationFrame: (id: number) => queue.delete(id),
     parent: { postMessage: vi.fn() },
+    setTimeout: (callback: () => void, delay: number) => { const id = ++sequence; timers.set(id, { at: now + delay, callback }); return id; },
+    clearTimeout: (id: number) => timers.delete(id),
+    setInterval: (_callback: () => void, _delay: number) => 0,
+    clearInterval: (_id: number) => {},
+    eval: vi.fn(),
   };
   class TestElement {
     animate() { const result = animation(); animations.push(result); return result; }
@@ -69,7 +74,7 @@ function harness(page = false) {
   const globals = {
     window, document, innerWidth: 1000, innerHeight: 700, performance: { now: () => now }, Element: TestElement,
     getComputedStyle: () => ({ backgroundImage: 'none', backgroundColor: '#fff', boxShadow: 'none', borderTopWidth: '0', borderBottomWidth: '0' }),
-    setTimeout: (callback: () => void, delay: number) => { const id = ++sequence; timers.set(id, { at: now + delay, callback }); return id; },
+    setTimeout: window.setTimeout,
     location: { search: '?active=0&interactive=1' }, URLSearchParams, parent: window.parent,
     addEventListener: (type: string, callback: (event: unknown) => void) => {
       const previous = messages.get(type);
@@ -192,6 +197,28 @@ describe('预览播放控制', () => {
     expect(later).not.toHaveBeenCalled();
   });
 
+  it('预热只累计前台时间，后台回来后继续完成入场再暂停', async () => {
+    const h = harness(true);
+    h.listeners.get('DOMContentLoaded')?.();
+    await Promise.resolve();
+    h.frame(16);
+    h.frame(32);
+    h.time(432);
+    h.document.hidden = true;
+    h.listeners.get('visibilitychange')?.();
+    h.time(10_000);
+    expect(h.attributes.has('data-paused')).toBe(true);
+    expect(h.window.parent.postMessage.mock.calls.filter(([message]) => message.type === 'cea:warmed')).toHaveLength(0);
+    h.document.hidden = false;
+    h.listeners.get('visibilitychange')?.();
+    expect(h.attributes.has('data-paused')).toBe(false);
+    h.time(11_199);
+    expect(h.attributes.has('data-paused')).toBe(false);
+    h.time(11_200);
+    expect(h.attributes.has('data-paused')).toBe(true);
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:warmed' }, '*');
+  });
+
   it('视口改变后即使内容边界相同也重新报告测量所属的布局', async () => {
     const h = harness(true);
     h.listeners.get('DOMContentLoaded')?.();
@@ -239,7 +266,7 @@ describe('预览播放控制', () => {
     expect(h.attributes.has('data-paused')).toBe(true);
   });
 
-  it('暂停逐帧回调，继续时扣除暂停时长而不是跳到结束', () => {
+  it('暂停逐帧回调，继续时保留浏览器时间轴，兼容 performance.now 和动画库', () => {
     const h = harness();
     const callback = vi.fn();
     h.window.requestAnimationFrame(callback);
@@ -254,8 +281,46 @@ describe('预览播放控制', () => {
     h.time(150);
     h.control.setActive(true);
     h.frame(160);
-    expect(callback).toHaveBeenCalledExactlyOnceWith(30);
+    expect(callback).toHaveBeenCalledExactlyOnceWith(160);
     expect(h.attributes.has('data-paused')).toBe(false);
+  });
+
+  it('暂停定时任务并保留剩余延迟，恢复后不补跑后台积压的轮次', () => {
+    const h = harness();
+    const timeout = vi.fn();
+    const interval = vi.fn();
+    h.window.setTimeout(timeout, 100);
+    const recurring = h.window.setInterval(interval, 100);
+    h.time(40);
+    h.control.setActive(false);
+    h.time(10_000);
+    expect(timeout).not.toHaveBeenCalled();
+    expect(interval).not.toHaveBeenCalled();
+    h.control.setActive(true);
+    h.time(10_059);
+    expect(timeout).not.toHaveBeenCalled();
+    h.time(10_060);
+    expect(timeout).toHaveBeenCalledOnce();
+    expect(interval).toHaveBeenCalledOnce();
+    h.window.clearTimeout(recurring);
+    h.time(10_200);
+    expect(interval).toHaveBeenCalledOnce();
+  });
+
+  it('暂停期间新建和取消的定时器不会提前执行', () => {
+    const h = harness();
+    h.control.setActive(false);
+    const cancelled = vi.fn();
+    const retained = vi.fn();
+    const timer = h.window.setTimeout(cancelled, 20);
+    h.window.setTimeout(retained, 20);
+    h.window.clearInterval(timer);
+    h.time(1000);
+    expect(retained).not.toHaveBeenCalled();
+    h.control.setActive(true);
+    h.time(1020);
+    expect(retained).toHaveBeenCalledOnce();
+    expect(cancelled).not.toHaveBeenCalled();
   });
 
   it('暂停期间取消的回调不会在继续后执行', () => {

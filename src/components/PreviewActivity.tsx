@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore, t
 export const MAX_RETAINED_PREVIEWS = 12;
 export const MAX_WARMING_PREVIEWS = 2;
 export const MAX_GPU_CONTEXTS = 6;
+export const BACKGROUND_RELEASE_MS = 30_000;
 
 export function createActivity() {
   const pending = new Set<symbol>();
@@ -14,6 +15,8 @@ export function createActivity() {
   const gpu = new Map<string, number>();
   const active = new Set<string>();
   let warmTimer: ReturnType<typeof setTimeout> | undefined;
+  let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+  let visible = true;
   const publish = () => listeners.forEach(listener => listener());
   const trim = (keep?: string) => {
     let changed = false;
@@ -34,7 +37,7 @@ export function createActivity() {
     publish();
   };
   const scheduleWarm = () => {
-    if (warmTimer || !waiting.size || warming.size >= MAX_WARMING_PREVIEWS) return;
+    if (!visible || warmTimer || !waiting.size || warming.size >= MAX_WARMING_PREVIEWS) return;
     warmTimer = setTimeout(() => {
       warmTimer = undefined;
       for (const id of waiting) {
@@ -49,7 +52,27 @@ export function createActivity() {
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     snapshot: () => pending.size,
     resident: () => retained,
+    visible: () => visible,
+    setVisible(value: boolean) {
+      if (visible === value) return;
+      visible = value;
+      clearTimeout(releaseTimer);
+      if (!visible) {
+        clearTimeout(warmTimer);
+        warmTimer = undefined;
+        releaseTimer = setTimeout(() => {
+          retained = [];
+          warming.clear();
+          gpu.clear();
+          active.clear();
+          publish();
+        }, BACKGROUND_RELEASE_MS);
+      } else scheduleWarm();
+      publish();
+    },
+    dispose() { clearTimeout(warmTimer); clearTimeout(releaseTimer); },
     retain(id: string) {
+      if (!visible) return;
       waiting.delete(id);
       retain(id);
       scheduleWarm();
@@ -101,6 +124,12 @@ const ActivityContext = createContext<ReturnType<typeof createActivity> | null>(
 export function PreviewActivity({ children }: { children: ReactNode }) {
   useUi();
   const [activity] = useState(createActivity);
+  useEffect(() => {
+    const sync = () => activity.setVisible(!document.hidden);
+    sync();
+    document.addEventListener('visibilitychange', sync);
+    return () => { document.removeEventListener('visibilitychange', sync); activity.dispose(); };
+  }, [activity]);
   return <ActivityContext.Provider value={activity}>{children}</ActivityContext.Provider>;
 }
 
@@ -118,12 +147,13 @@ export function useRetainedPreview(id: string, requested: boolean, warm = false)
     activity?.resident ?? (() => EMPTY_RESIDENTS),
     () => EMPTY_RESIDENTS,
   );
+  const visible = useSyncExternalStore(activity?.subscribe ?? (() => () => {}), activity?.visible ?? (() => true), () => true);
   useEffect(() => {
-    if (requested) activity?.retain(id);
-  }, [activity, id, requested]);
+    if (visible && requested) activity?.retain(id);
+  }, [activity, id, requested, visible]);
   useEffect(() => {
-    if (warm && !requested) return activity?.prewarm(id);
-  }, [activity, id, warm, requested]);
+    if (visible && warm && !requested) return activity?.prewarm(id);
+  }, [activity, id, warm, requested, visible]);
   useEffect(() => () => activity?.release(id), [activity, id]);
   return activity ? retained.includes(id) : requested;
 }

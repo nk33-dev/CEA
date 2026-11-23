@@ -209,7 +209,7 @@ function runtime(theme: ThemeContract, query: string) {
   const script = htmlPlayPage('Test', [], { theme }).match(/<script>([\s\S]*?)<\/script>/)![1];
   vm.runInNewContext(script, {
     location: { search: query }, URLSearchParams, parent,
-    window: { requestAnimationFrame() {}, cancelAnimationFrame() {} },
+    window: { requestAnimationFrame() {}, cancelAnimationFrame() {}, setTimeout() {}, clearTimeout() {} },
     document: { documentElement: root, addEventListener() {} },
     addEventListener: (_type: string, fn: typeof receive) => { receive = fn; },
   });

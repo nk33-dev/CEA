@@ -1,9 +1,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createActivity, MAX_GPU_CONTEXTS, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS } from '../src/components/PreviewActivity.tsx';
+import { BACKGROUND_RELEASE_MS, createActivity, MAX_GPU_CONTEXTS, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS } from '../src/components/PreviewActivity.tsx';
 
 afterEach(() => vi.useRealTimers());
 
 describe('列表预览预算', () => {
+  it('后台不启动预热，短暂离开保留实例，长时间后台释放全部实例', () => {
+    vi.useFakeTimers();
+    const activity = createActivity();
+    activity.retain('live');
+    activity.activate('live', true);
+    activity.setVisible(false);
+    activity.prewarm('waiting');
+    activity.retain('hidden');
+    vi.advanceTimersByTime(BACKGROUND_RELEASE_MS - 1);
+    expect(activity.resident()).toEqual(['live']);
+    activity.setVisible(true);
+    expect(activity.resident()).toEqual(['live']);
+    vi.advanceTimersByTime(120);
+    expect(activity.resident()).toContain('waiting');
+    activity.setVisible(false);
+    vi.advanceTimersByTime(BACKGROUND_RELEASE_MS);
+    expect(activity.resident()).toEqual([]);
+    activity.setVisible(true);
+    activity.retain('live');
+    expect(activity.resident()).toEqual(['live']);
+    activity.dispose();
+  });
   it('按实际 WebGL 上下文限制驻留，不挤掉正在操作的预览和普通组件', () => {
     const activity = createActivity();
     activity.retain('plain');

@@ -71,7 +71,7 @@ body{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr);place-ite
 font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei UI",sans-serif;-webkit-font-smoothing:antialiased}
 /* 组件取景由宿主居中；内部高度变化时保持顶部锚点，避免两层居中异步抵消。 */
 :where(html[data-framing="content"]) body,:where(html[data-framing="content"]) #root{align-items:start}
-:where(html[data-framing="content"]) body:has([data-preview-bounds]){padding:0}
+:where(html[data-framing="content"]) body:has([data-preview-bounds]){padding:24px 0}
 :where(html[data-framing="device"]) body{padding:0;display:block}
 :where(html[data-framing="device"]) #root{display:block}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:240ms;animation-timing-function:ease}
@@ -114,6 +114,22 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   var requestedInteractive = params.get('interactive')==='1';
   var previewReady = false;
   var warming = false;
+  var warmTimer=null,warmStarted=0,warmRemaining=1600;
+  function syncWarmTimer(){
+    if(warmTimer!==null)warmRemaining=Math.max(0,warmRemaining-(performance.now()-warmStarted));
+    nativeClearTimeout(warmTimer);
+    warmTimer=null;
+    if(!warming||document.hidden)return;
+    warmStarted=performance.now();
+    warmTimer=nativeTimeout(function(){
+      warmTimer=null;
+      warming=false;
+      setActive(!previewFault&&requestedActive&&!document.hidden,requestedInteractive);
+      reportBounds();
+      parent.postMessage({type:'cea:warmed'},'*');
+    },warmRemaining);
+  }
+  if(document.hidden)setActive(false,requestedInteractive);
   var boundsObserver=null,boundsObserved=new Set();
   document.addEventListener('DOMContentLoaded', function() {
     var fonts = document.fonts ? document.fonts.ready : Promise.resolve();
@@ -127,12 +143,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
         if (!requestedActive) {
           warming = true;
           setActive(!document.hidden, requestedInteractive);
-          setTimeout(function() {
-            warming = false;
-            setActive(!previewFault&&requestedActive&&!document.hidden, requestedInteractive);
-            reportBounds();
-            parent.postMessage({type:'cea:warmed'},'*');
-          }, 1600);
+          syncWarmTimer();
         } else {
           setActive(requestedActive&&!document.hidden, requestedInteractive);
           parent.postMessage({type:'cea:warmed'},'*');
@@ -231,7 +242,8 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   }
   componentTheme(params.get('componentTheme'));
   document.addEventListener('visibilitychange', function(){
-    if(previewReady)setActive(!previewFault&&!document.hidden&&(warming||requestedActive), requestedInteractive);
+    syncWarmTimer();
+    setActive(!previewFault&&!document.hidden&&(!previewReady||warming||requestedActive), requestedInteractive);
   });
   // 外层在预览就绪时会把当前主题再发一遍，值没变就什么都不做：
   // 空转一次 view transition 会截一张整页快照再淡入，卡片在这一瞬间会闪白。
@@ -260,7 +272,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     if(d.type==='cea:active'){
       requestedActive=Boolean(d.value);
       requestedInteractive=Boolean(d.interactive);
-      if(requestedActive&&warming){warming=false;parent.postMessage({type:'cea:warmed'},'*');}
+      if(requestedActive&&warming){warming=false;syncWarmTimer();parent.postMessage({type:'cea:warmed'},'*');}
       if(previewReady&&!warming)setActive(!previewFault&&requestedActive&&!document.hidden, requestedInteractive);
     }
     if(d.type==='cea:component-theme'&&chosenTheme(d.value)!==(document.documentElement.dataset.theme||''))switchTheme(function(){componentTheme(d.value);});

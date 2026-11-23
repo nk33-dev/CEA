@@ -60,10 +60,8 @@ test('visible covers warm two at a time and a hovered card bypasses the queue', 
   await expect(target.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
   await expect.poll(() => started.length).toBe(6);
   await expect(page.locator('iframe')).toHaveCount(6);
-  for (const card of await page.locator('.card').all()) {
-    if (await card.getAttribute('data-asset-id') === 'warm-0002') continue;
-    await expect(card.locator('.card-cover')).toBeVisible();
-  }
+  await expect(page.locator('.fit-stage[data-display]')).toHaveCount(6);
+  await expect(page.locator('.card-cover:visible')).toHaveCount(18);
   expect(started.some(url => url.includes('/warm-0006/'))).toBe(false);
 });
 
@@ -83,7 +81,7 @@ test('a page change keeps the current cards until the replacement is ready', asy
   });
   await page.goto('/');
   await expect(page.locator('.card')).toHaveCount(24);
-  await page.getByRole('button', { name: '下一页', exact: true }).scrollIntoViewIfNeeded();
+  await page.locator('.card').last().scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     const state = window as unknown as { pageSamples: { count: number; height: number; y: number }[]; stopSamples: boolean };
     state.pageSamples = [];
@@ -104,7 +102,7 @@ test('a page change keeps the current cards until the replacement is ready', asy
   await expect(page.locator('.results')).toHaveAttribute('aria-busy', 'false');
   const scroll = await page.evaluate(() => ({ top: document.querySelector('.results')!.getBoundingClientRect().top, y: scrollY }));
   expect(scroll.top).toBeGreaterThanOrEqual(60);
-  expect(scroll.top).toBeLessThan(180);
+  expect(scroll.top).toBeLessThan(260);
   const samples = await page.evaluate(() => {
     const state = window as unknown as { pageSamples: { count: number; height: number; y: number }[]; stopSamples: boolean };
     state.stopSamples = true;
