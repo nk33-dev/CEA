@@ -5,6 +5,13 @@ import { DEFAULT_LOCALE, normalizeLocale } from '../../shared/locales.ts';
  * 记在本机的界面偏好，例如上次选的框架和语言。所有用到同一个 key 的组件同步更新。
  */
 export const PREFERENCE_EVENT = 'cea:pref';
+const sessionPreferences = new Map<string, string>();
+
+function readPreference(key: string, fallback: string) {
+  if (sessionPreferences.has(key)) return sessionPreferences.get(key)!;
+  try { return localStorage.getItem(key) ?? fallback; }
+  catch { return fallback; }
+}
 
 function subscribe(callback: () => void) {
   window.addEventListener(PREFERENCE_EVENT, callback);
@@ -16,9 +23,10 @@ function subscribe(callback: () => void) {
 }
 
 export function usePref(key: string, fallback: string): [string, (value: string) => void] {
-  const value = useSyncExternalStore(subscribe, () => localStorage.getItem(key) ?? fallback, () => fallback);
+  const value = useSyncExternalStore(subscribe, () => readPreference(key, fallback), () => fallback);
   const set = useCallback((next: string) => {
-    localStorage.setItem(key, next);
+    try { localStorage.setItem(key, next); sessionPreferences.delete(key); }
+    catch { sessionPreferences.set(key, next); }
     window.dispatchEvent(new Event(PREFERENCE_EVENT));
   }, [key]);
   return [value, set];

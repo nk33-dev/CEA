@@ -1,5 +1,5 @@
 import { uiText, useUi } from './uiI18n.ts';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import X from 'lucide-react/icons/x';
 import type { Category, LibraryInfo, TagCount } from '../../shared/types.ts';
 import { api, errorMessage } from './api.ts';
@@ -36,21 +36,25 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const toastEl = useRef<HTMLDivElement>(null);
   const toast = useRef<ToastHandle | null>(null);
   const loadVersion = useRef(0);
+  const loading = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
     const version = ++loadVersion.current;
+    loading.current?.abort();
+    const controller = new AbortController();
+    loading.current = controller;
     try {
-      const i = await api.library();
-      const [c, t] = i ? await Promise.all([api.categories(), api.tags()]) : [[], []];
-      if (version !== loadVersion.current) return;
+      const i = await api.library(controller.signal);
+      const [c, t] = i ? await Promise.all([api.categories(controller.signal), api.tags(controller.signal)]) : [[], []];
+      if (controller.signal.aborted || version !== loadVersion.current) return;
       setInfo(i);
       setCategories(c);
       setTags(t);
       setLoadError(null);
     } catch (e) {
-      if (version === loadVersion.current) setLoadError(errorMessage(e));
+      if (!controller.signal.aborted && version === loadVersion.current) setLoadError(errorMessage(e));
     } finally {
-      if (version === loadVersion.current) {
+      if (!controller.signal.aborted && version === loadVersion.current) {
         setInitialized(true);
         setRevision(r => r + 1);
       }
@@ -59,6 +63,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
+    return () => loading.current?.abort();
   }, [refresh]);
 
   useEffect(() => {
@@ -67,9 +72,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const notify = useCallback((text: string) => toast.current?.show(text, { duration: 4000 }), []);
+  const value = useMemo(() => ({ info, categories, tags, refresh, revision, loadError, initialized, notify }), [info, categories, tags, refresh, revision, loadError, initialized, notify]);
 
   return (
-    <LibraryContext.Provider value={{ info, categories, tags, refresh, revision, loadError, initialized, notify }}>
+    <LibraryContext.Provider value={value}>
       {children}
       <div ref={toastEl} className="t-toast toast" role="status" aria-live="polite" aria-hidden="true" inert>
         <span data-toast-message />

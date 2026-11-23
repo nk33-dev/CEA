@@ -50,12 +50,13 @@ export function OrganizePage() {
     return all.map(row => ({ row, search: labelSearch(row.name, row.labels) }));
   }, [tab, tags, categories]);
   const missing = indexed.filter(({ row }) => !row.labels?.zh?.trim() || !row.labels?.en?.trim()).length;
+  const categoryRanks = useMemo(() => new Map(categories.map((category, index) => [category.id, index])), [categories]);
   const rows = useMemo(() => indexed.filter(entry => entry.search.includes(deferredQuery.trim().toLowerCase()))
     .map(entry => entry.row)
     .filter(row => status !== 'missing' || !row.labels?.zh?.trim() || !row.labels?.en?.trim())
     .sort((a, b) => order === 'name' ? localizedName(a.name, a.labels, locale).localeCompare(localizedName(b.name, b.labels, locale))
-      : order === 'manual' ? categories.findIndex(category => category.id === a.id) - categories.findIndex(category => category.id === b.id)
-      : b.count - a.count || a.name.localeCompare(b.name)), [indexed, deferredQuery, status, order, locale, categories]);
+      : order === 'manual' ? (categoryRanks.get(a.id) ?? -1) - (categoryRanks.get(b.id) ?? -1)
+      : b.count - a.count || a.name.localeCompare(b.name)), [indexed, deferredQuery, status, order, locale, categoryRanks]);
   const virtual = useVirtualizer({ count: Math.ceil(rows.length / columns), getScrollElement: () => scroll.current, estimateSize: () => 64, overscan: 3 });
   useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [query, tab, status, order]);
   useEffect(() => { setSelected(new Set()); setQuery(''); setOrder('usage'); }, [tab]);

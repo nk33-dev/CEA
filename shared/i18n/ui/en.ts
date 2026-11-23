@@ -569,5 +569,11 @@ export const en: Record<string, string> = {
   "CSS 开头的 ": "At the start of CSS, ",
   " 列出动效参数，值从 :root 里读；参数名同样可以加 ": " lists motion parameters from CSS variables; parameter names can also include ",
   " 后面写中文，详情页切到中文时显示": " followed by Chinese, shown in Chinese content mode",
-  " 使用时要注意的行为，也可以用 Note:；": " documents usage behavior; Note: also works; "
+  " 使用时要注意的行为，也可以用 Note:；": " documents usage behavior; Note: also works; ",
+  "草稿无法自动保存，请在离开前保存组件": "Draft autosave is unavailable. Save the component before leaving.",
+  "预览编译繁忙，请稍后重试": "Preview compilation is busy. Try again shortly.",
+  "导入文件太大，请分批导入": "The import exceeds the memory budget. Import it in smaller batches.",
+  "文件夹超过 512 MB，请分批导入": "The folder exceeds 512 MB. Import it in smaller batches.",
+  "文件夹里的文件超过 2 万个，请分批导入": "The folder contains more than 20,000 files. Import it in smaller batches.",
+  "文件夹打包失败，请重试或选择本机文件夹": "Could not package the folder. Retry or select a local folder.",
 };

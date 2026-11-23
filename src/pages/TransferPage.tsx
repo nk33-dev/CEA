@@ -1,12 +1,13 @@
 import { uiText, useUi } from '../lib/uiI18n.ts';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import ArrowRight from 'lucide-react/icons/arrow-right';
 import Check from 'lucide-react/icons/check';
 import Download from 'lucide-react/icons/download';
 import FileArchive from 'lucide-react/icons/file-archive';
 import FolderOpen from 'lucide-react/icons/folder-open';
-import { strToU8, zipSync } from 'fflate';
+import { strToU8 } from 'fflate';
+import { archiveFiles } from '../lib/archive.ts';
 import { frameworkLabel } from '../../shared/frameworks.ts';
 import type { DuplicateStrategy, ImportPreview, ImportResult } from '../../shared/types.ts';
 import { AiPromptCard } from '../components/AiPrompt.tsx';
@@ -28,29 +29,37 @@ const FORMATS: { value: ExportFormat; label: string; hint: string }[] = [
 
 
 /** 拖进来的文件夹打包成 ZIP 再上传，服务端按同一套规则识别 */
-async function readDropped(items: DataTransferItemList): Promise<File | null> {
-  const entries = [...items].map(i => i.webkitGetAsEntry?.()).filter((e): e is FileSystemEntry => !!e);
+async function readDropped(entries: FileSystemEntry[], signal: AbortSignal): Promise<File | null> {
   if (!entries.some(e => e.isDirectory)) return null;
   const files: Record<string, Uint8Array> = {};
+  let bytes = 0;
+  let count = 0;
   const readEntries = (dir: FileSystemDirectoryEntry) => new Promise<FileSystemEntry[]>((resolve, reject) => {
     const reader = dir.createReader();
     const all: FileSystemEntry[] = [];
-    const next = () => reader.readEntries(batch => { if (batch.length) { all.push(...batch); next(); } else resolve(all); }, reject);
+    const next = () => {
+      if (signal.aborted) { reject(signal.reason); return; }
+      reader.readEntries(batch => { if (batch.length) { all.push(...batch); next(); } else resolve(all); }, reject);
+    };
     next();
   });
   const walk = async (entry: FileSystemEntry, prefix: string): Promise<void> => {
+    signal.throwIfAborted();
     if (['node_modules', '.git', 'dist'].includes(entry.name)) return;
     if (entry.isDirectory) {
       for (const child of await readEntries(entry as FileSystemDirectoryEntry)) await walk(child, `${prefix}${entry.name}/`);
     } else {
       const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
+      bytes += file.size;
+      if (bytes > 512 * 1024 * 1024) throw new Error(uiText('文件夹超过 512 MB，请分批导入'));
+      if (++count > 20_000) throw new Error(uiText('文件夹里的文件超过 2 万个，请分批导入'));
       files[prefix + entry.name] = new Uint8Array(await file.arrayBuffer());
     }
   };
   for (const e of entries) await walk(e, '');
   if (!Object.keys(files).length) files['.empty'] = strToU8('');
   const name = entries.length === 1 ? entries[0].name : uiText("拖入的文件夹");
-  return new File([zipSync(files, { level: 0 })], `${name}.zip`, { type: 'application/zip' });
+  return new File([await archiveFiles(files, signal)], `${name}.zip`, { type: 'application/zip' });
 }
 
 export function TransferPage() {
@@ -73,6 +82,13 @@ export function TransferPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
+  const loading = useRef<AbortController | null>(null);
+  useEffect(() => {
+    loading.current?.abort();
+    busy.current = false;
+    setSource(''); setPreview(null); setResult(null); setError(null); setReading(false);
+    return () => loading.current?.abort();
+  }, [info?.libraryId]);
 
   const download = async () => {
     setExporting(true);
@@ -90,27 +106,38 @@ export function TransferPage() {
     finally { setExporting(false); }
   };
 
-  const load = async (label: string, fn: () => Promise<{ token: string; preview: ImportPreview }>) => {
+  const load = async (label: string, fn: (signal: AbortSignal) => Promise<{ token: string; preview: ImportPreview }>) => {
     if (busy.current || importing) return;
     busy.current = true;
+    const controller = new AbortController();
+    loading.current = controller;
     setSource(label);
     setPreview(null);
     setResult(null);
     setMode('merge');
     setError(null);
     setReading(true);
-    try { setPreview(await fn()); }
-    catch (e) { setError(errorMessage(e)); }
-    finally { busy.current = false; setReading(false); }
+    try {
+      const next = await fn(controller.signal);
+      if (!controller.signal.aborted) setPreview(next);
+    }
+    catch (e) { if (!controller.signal.aborted) setError(errorMessage(e)); }
+    finally { if (loading.current === controller) { busy.current = false; setReading(false); } }
   };
-  const chooseFile = (f: File) => void load(f.name, () => api.previewImport(f));
-  const chooseFolder = (path: string) => void load(path, () => api.previewFolder(path));
+  const chooseFile = (f: File) => void load(f.name, signal => api.previewImport(f, signal));
+  const chooseFolder = (path: string) => void load(path, signal => api.previewFolder(path, signal));
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const zipped = await readDropped(e.dataTransfer.items).catch(() => null);
-    const file = zipped ?? e.dataTransfer.files[0];
-    if (file) chooseFile(file);
+    const entries = [...e.dataTransfer.items].map(item => item.webkitGetAsEntry?.()).filter((entry): entry is FileSystemEntry => !!entry);
+    const firstFile = e.dataTransfer.files[0];
+    if (!firstFile && !entries.length) return;
+    await load(entries[0]?.name ?? firstFile.name, async signal => {
+      const file = await readDropped(entries, signal) ?? firstFile;
+      signal.throwIfAborted();
+      if (!file) throw new Error(uiText('请选择要导入的 ZIP 文件'));
+      return api.previewImport(file, signal);
+    });
   };
 
   const reset = () => { setSource(''); setPreview(null); setError(null); setResult(null); setMode('merge'); };

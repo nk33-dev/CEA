@@ -30,9 +30,11 @@ export function useDraftPreview(input: PreviewInput | null) {
       return;
     }
     const cached = cache.current.get(input.framework);
+    const retrying = lastRetry.current !== retry;
+    lastRetry.current = retry;
     const fresh = cached && Date.now() - cached.at < 5 * 60_000;
     const same = cached && cached.input.assetId === input.assetId && cached.input.entry === input.entry && cached.input.previewEntry === input.previewEntry && cached.input.files === input.files && cached.input.theme === input.theme;
-    if (fresh && same) {
+    if (!retrying && fresh && same) {
       setUrl(cached.url);
       setError('');
       setPending(false);
@@ -40,8 +42,7 @@ export function useDraftPreview(input: PreviewInput | null) {
       return;
     }
     const switching = current.current !== input.framework;
-    const retrying = lastRetry.current !== retry;
-    lastRetry.current = retry;
+    if (switching) setUrl(null);
     current.current = input.framework;
     const controller = new AbortController();
     setError('');

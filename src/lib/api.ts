@@ -55,7 +55,8 @@ async function download(method: string, url: string, body?: unknown) {
   }
   const disposition = res.headers.get('content-disposition') ?? '';
   const match = /filename\*=UTF-8''([^;]+)/.exec(disposition);
-  const name = match ? decodeURIComponent(match[1]) : 'export.zip';
+  let name = 'export.zip';
+  try { if (match) name = decodeURIComponent(match[1]); } catch { /* 文件名编码损坏时仍可下载导出包。 */ }
   const blob = await res.blob();
   const href = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -69,7 +70,7 @@ async function download(method: string, url: string, body?: unknown) {
 }
 
 export const api = {
-  library: () => request<LibraryInfo | null>('GET', '/api/library'),
+  library: (signal?: AbortSignal) => request<LibraryInfo | null>('GET', '/api/library', undefined, undefined, signal),
   switchLibrary: (path: string) => request<LibraryInfo>('PUT', '/api/library', { path }),
   forgetRecent: (path: string) => request<LibraryInfo>('DELETE', '/api/library/recent', { path }),
 
@@ -93,13 +94,13 @@ export const api = {
     request<AssetDetail>('PATCH', `/api/assets/${encodeURIComponent(id)}/media/${fileId}`, patch),
   deleteMedia: (id: string, fileId: number) => request<AssetDetail>('DELETE', `/api/assets/${encodeURIComponent(id)}/media/${fileId}`),
 
-  categories: () => request<Category[]>('GET', '/api/categories'),
+  categories: (signal?: AbortSignal) => request<Category[]>('GET', '/api/categories', undefined, undefined, signal),
   createCategory: (name: string) => request<Category>('POST', '/api/categories', { name }),
   updateCategory: (id: string, patch: { name?: string; sort?: number; labels?: Record<string, string> }) => request<Category>('PATCH', `/api/categories/${encodeURIComponent(id)}`, patch),
   deleteCategory: (id: string) => request<void>('DELETE', `/api/categories/${encodeURIComponent(id)}`),
   deleteCategories: (ids: string[]) => request<{ changed: number }>('POST', '/api/categories/batch', { ids }),
   orderCategories: (ids: string[]) => request<void>('POST', '/api/categories/order', { ids }),
-  tags: () => request<TagCount[]>('GET', '/api/tags'),
+  tags: (signal?: AbortSignal) => request<TagCount[]>('GET', '/api/tags', undefined, undefined, signal),
   renameTag: (from: string, name: string) => request<void>('PATCH', `/api/tags/${encodeURIComponent(from)}`, { name }),
   tagLabels: (name: string, labels: Record<string, string>) => request<void>('PATCH', `/api/tags/${encodeURIComponent(name)}`, { labels }),
   deleteTag: (name: string) => request<void>('DELETE', `/api/tags/${encodeURIComponent(name)}`),
@@ -108,8 +109,8 @@ export const api = {
   exportZip: (ids?: string[], format: ExportFormat = 'backup') => download('POST', '/api/export', { ids, format }),
   exportFolder: (targetDir: string, ids?: string[]) => request<{ path: string }>('POST', '/api/export', { ids, format: 'folder', targetDir }),
   referencePackage: (id: string) => download('GET', `/api/assets/${encodeURIComponent(id)}/package`),
-  previewImport: (file: File) => request<{ token: string; preview: ImportPreview }>('POST', `/api/import/preview?name=${encodeURIComponent(file.name)}`, undefined, file),
-  previewFolder: (path: string) => request<{ token: string; preview: ImportPreview }>('POST', '/api/import/folder', { path }),
+  previewImport: (file: File, signal?: AbortSignal) => request<{ token: string; preview: ImportPreview }>('POST', `/api/import/preview?name=${encodeURIComponent(file.name)}`, undefined, file, signal),
+  previewFolder: (path: string, signal?: AbortSignal) => request<{ token: string; preview: ImportPreview }>('POST', '/api/import/folder', { path }, undefined, signal),
   runImport: (body: { token: string; mode: 'merge' | 'new'; duplicates: DuplicateStrategy; targetPath?: string }) =>
     request<ImportResult>('POST', '/api/import', body),
 };

@@ -32,6 +32,8 @@ import { api, ApiError, errorMessage } from '../lib/api.ts';
 import { useLibrary } from '../lib/store.tsx';
 import { useDraftPreview } from '../lib/draftPreview.ts';
 import { ResourceList } from '../components/ResourceList.tsx';
+import { z } from 'zod';
+import { parseThemeContract } from '../../shared/theme.ts';
 
 const HTML_LABEL: Record<string, string> = { 'markup.html': 'Markup', 'style.css': 'Styles', 'script.js': 'Script' };
 const HTML_PLACEHOLDER: Record<string, string> = { 'markup.html': '<div class="card">…</div>', 'style.css': '.card { … }', 'script.js': '// 在结构之后运行一次' };
@@ -86,6 +88,28 @@ function parseDeps(text: string): Record<string, string> {
 }
 
 const DRAFT_KEY = 'cea:draft:new:v2';
+const draftSchema = z.object({
+  id: z.string(), title: z.string(), categoryId: z.string(), tags: z.array(z.string()),
+  sourceUrl: z.string(), sourceName: z.string(), previewScale: z.number().finite(),
+  previewViewport: z.object({ width: z.number().positive().finite(), height: z.number().positive().finite() }).nullable(),
+  texts: z.record(z.string(), z.object({
+    title: z.string().optional(), summary: z.string(), idea: z.string(),
+    themeIdeas: z.object({ light: z.string().optional(), dark: z.string().optional() }).optional(),
+  })),
+  variants: z.array(z.object({
+    framework: z.string().refine(value => !!frameworkInfo(value)), entry: z.string(), deps: z.string(),
+    previewEntry: z.string().optional(), supportsDarkMode: z.boolean().optional(),
+    files: z.array(z.object({ path: z.string(), content: z.string() })).min(1),
+    resources: z.array(z.object({ path: z.string(), mime: z.string(), size: z.number().nonnegative() })).optional(),
+    theme: z.custom<ThemeContract | null>(value => {
+      try { parseThemeContract(value); return true; } catch { return false; }
+    }).optional(),
+  })).min(1),
+});
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* 存储受限时仍允许保存到素材库或丢弃当前草稿。 */ }
+}
 
 /** 组件配色声明合成一个下拉：双主题的默认色直接写进选项，不再多一个「默认主题」 */
 const THEME_KEYS = {
@@ -114,12 +138,12 @@ export function EditPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState(false);
   const [fw, setFw] = useState('html');
   const [activeFile, setActiveFile] = useState('markup.html');
   const [textLocale, setTextLocale] = useState(DEFAULT_LOCALE);
   const [ideaTheme, setIdeaTheme] = useState<'original' | ComponentTheme>('original');
   const { background, setBackground, componentTheme, setComponentTheme } = usePreviewSession();
-  const [reloadKey, setReloadKey] = useState(0);
   const [previewTab, setPreviewTab] = useState<'live' | 'card'>('live');
   const [editorTab, setEditorTab] = useState<'code' | 'info'>('code');
   const fullscreen = useFullscreen<HTMLDivElement>();
@@ -134,6 +158,8 @@ export function EditPage() {
   const [fileError, setFileError] = useState('');
   const [removingFramework, setRemovingFramework] = useState(false);
   const saved = useRef(false);
+  const latestDraft = useRef({ draft, editing });
+  latestDraft.current = { draft, editing };
 
   const open = (d: Draft) => {
     setDraft(d);
@@ -143,7 +169,14 @@ export function EditPage() {
   };
 
   useEffect(() => {
+    setLoadError(null);
+    setSaveError(null);
+    setStorageError(false);
+    setRestored(false);
+    setDirty(false);
+    saved.current = false;
     if (editing) {
+      setDraft(null);
       const controller = new AbortController();
       api.asset(id!, controller.signal).then(a => {
         if (controller.signal.aborted) return;
@@ -159,15 +192,34 @@ export function EditPage() {
     initialDraft.current = fresh;
     setInitial(JSON.stringify(fresh));
     let d = fresh;
-    const stored = localStorage.getItem(DRAFT_KEY);
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(DRAFT_KEY); }
+    catch { setStorageError(true); }
     if (stored) {
       try {
-        d = { ...fresh, ...JSON.parse(stored) };
+        d = draftSchema.parse({ ...fresh, ...JSON.parse(stored) });
         setRestored(true);
-      } catch { /* 草稿损坏时用空白模板 */ }
+      } catch { clearDraft(); }
     }
     open(d);
   }, [editing, id]);
+
+  useEffect(() => {
+    const flush = () => {
+      const current = latestDraft.current;
+      if (current.editing || saved.current || !current.draft) return;
+      try { localStorage.setItem(DRAFT_KEY, JSON.stringify(current.draft)); }
+      catch { setStorageError(true); }
+    };
+    const hidden = () => { if (document.hidden) flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', hidden);
+      flush();
+    };
+  }, []);
 
   // 停止输入 300ms 后再比较内容并保存草稿，长代码打字时不卡
   useEffect(() => {
@@ -183,8 +235,11 @@ export function EditPage() {
       setDirty(changed);
       // 新建时自动把草稿存到本机，意外关闭页面后可以继续
       if (editing || saved.current) return;
-      if (changed) localStorage.setItem(DRAFT_KEY, json);
-      else localStorage.removeItem(DRAFT_KEY);
+      try {
+        if (changed) localStorage.setItem(DRAFT_KEY, json);
+        else localStorage.removeItem(DRAFT_KEY);
+        setStorageError(false);
+      } catch { setStorageError(true); }
     }, 300);
     return () => clearTimeout(t);
   }, [draft, initial, editing]);
@@ -198,13 +253,13 @@ export function EditPage() {
   const previewUrl = draftPreview.url;
 
   useEffect(() => {
-    if (!dirty || !editing) return;
-    const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    if (!dirty || (!editing && !storageError)) return;
+    const onUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
-  }, [dirty, editing]);
+  }, [dirty, editing, storageError]);
 
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => editing && dirty && !saved.current && currentLocation.pathname !== nextLocation.pathname);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => (editing || storageError) && dirty && !saved.current && currentLocation.pathname !== nextLocation.pathname);
 
   const suggestedId = useMemo(() => slugify(draft?.title ?? ''), [draft?.title]);
 
@@ -371,7 +426,7 @@ export function EditPage() {
     try {
       const result = editing ? await api.updateAsset(id!, input) : await api.createAsset(input);
       saved.current = true;
-      if (!editing) localStorage.removeItem(DRAFT_KEY);
+      if (!editing) clearDraft();
       await refresh();
       notify(editing ? uiText("修改已保存") : uiText("已添加「{{value0}}」", {value0: result.title}));
       navigate(`/a/${result.id}`, { replace: true });
@@ -382,7 +437,7 @@ export function EditPage() {
   };
 
   const discardDraft = () => {
-    localStorage.removeItem(DRAFT_KEY);
+    clearDraft();
     open(emptyDraft());
     setRestored(false);
   };
@@ -393,6 +448,7 @@ export function EditPage() {
 
   return (
     <form className="studio editor" onSubmit={save} noValidate>
+      {storageError && <p className="form-error" role="alert">{uiText('草稿无法自动保存，请在离开前保存组件')}</p>}
       <header className="studio-head">
         <Link to={editing ? `/a/${id}` : '/'} className="icon-btn" aria-label={uiText("返回")}>
           <ArrowLeft size={18} strokeWidth={1.8} aria-hidden="true" />
@@ -514,7 +570,7 @@ export function EditPage() {
               {previewTab === 'live' && <AppearanceToggle value={appearance} onChange={setComponentTheme} support={themeSupport} />}
               <div className="panel-bar-right">
                 {previewTab === 'live' && <DeviceBackground />}
-                <button type="button" className="icon-btn" aria-label={uiText("重播")} title={uiText("重播")} onClick={() => setReloadKey(k => k + 1)}>
+                <button type="button" className="icon-btn" aria-label={uiText("重播")} title={uiText("重播")} disabled={draftPreview.pending} onClick={draftPreview.retry}>
                   <RotateCcw size={16} strokeWidth={1.8} aria-hidden="true" />
                 </button>
               </div>
@@ -531,7 +587,7 @@ export function EditPage() {
               <div className={`preview-well preview-well-edit${background === 'dark' ? ' theme-dark' : ''}`}>
                 <PreviewLoading busy={draftPreview.pending} />
                 {previewUrl
-                  ? <DeviceCanvas active={editorTab === 'code'}>{(device, onBounds, framing) => <Stage src={previewUrl} title={draft.title || uiText("草稿")} reloadKey={reloadKey} componentTheme={effectiveTheme} theme={background === 'dark' ? 'dark' : 'light'} active={editorTab === 'code'} device={device} framing={framing} onBounds={onBounds} />}</DeviceCanvas>
+                  ? <DeviceCanvas active={editorTab === 'code'}>{(device, onBounds, framing) => <Stage src={previewUrl} title={draft.title || uiText("草稿")} componentTheme={effectiveTheme} theme={background === 'dark' ? 'dark' : 'light'} active={editorTab === 'code'} device={device} framing={framing} onBounds={onBounds} />}</DeviceCanvas>
                   : variant.files.some(f => f.content.trim())
                     ? <div className="stage-host" aria-busy="true"><PreviewLoading /></div>
                     : <p className="preview-empty">{uiText("填入代码后在这里预览")}</p>}
@@ -539,7 +595,7 @@ export function EditPage() {
             </> : (
               <div className="card-look">
                 <div className="card-look-sample">
-                  <CardSample draft={draft} locale={textLocale} previewUrl={previewUrl} reloadKey={reloadKey} />
+                  <CardSample draft={draft} locale={textLocale} previewUrl={previewUrl} />
                 </div>
               </div>
             )}
@@ -707,14 +763,14 @@ export function EditPage() {
 }
 
 /** 和浏览页的卡片同样的结构和尺寸，保存前就能看到素材在列表里的样子 */
-function CardSample({ draft, locale, previewUrl, reloadKey }: { draft: Draft; locale: string; previewUrl: string | null; reloadKey: number }) {
+function CardSample({ draft, locale, previewUrl }: { draft: Draft; locale: string; previewUrl: string | null }) {
   useUi();
   const summary = pickText(draft, locale, 'summary');
   return (
     <article className="card card-sample" aria-label={uiText("列表卡片预览")}>
       <div className="card-stage">
         {previewUrl && <FitStage src={previewUrl} title={uiText("列表缩略图")} viewport={draft.previewViewport} zoom={draft.previewScale}
-          active={false} inert reloadKey={reloadKey} />}
+          active={false} inert />}
       </div>
       <div className="card-meta">
         <span className="card-head">
