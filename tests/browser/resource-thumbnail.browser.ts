@@ -8,6 +8,7 @@ import { createApp } from '../../server/app.ts';
 import { listenForFetch } from '../helpers/http.ts';
 import type { Variant } from '../../shared/types.ts';
 import { PNG } from './fixtures/mockLibrary.ts';
+import { clickScaledFrame } from './fixtures/framePointer.ts';
 
 let directory: string;
 let lib: Library;
@@ -83,12 +84,12 @@ test('a high-density cover and its padded painted frame keep the same crop', asy
   for (const edge of ['left', 'right', 'top', 'bottom'] as const) expect(Math.abs(after[edge] - before[edge])).toBeLessThanOrEqual(1);
 });
 
-test('a warmed frame replaces the cover before interaction and remains mounted', async ({ page }) => {
+test('a runnable component bypasses its cover and keeps one frame for interaction', async ({ page }) => {
   await page.goto(base);
   await page.mouse.move(0, 0);
   const card = page.locator('[data-asset-id="covered-html"]');
   const cover = card.locator('.card-cover');
-  await expect(cover).toBeVisible();
+  await expect(cover).toHaveCount(0);
   await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   await expect(cover).toBeHidden();
   await expect(card.locator('.fit-stage')).toBeVisible();
@@ -102,7 +103,8 @@ test('a warmed frame replaces the cover before interaction and remains mounted',
   await expect(live).toHaveCSS('opacity', '1');
   await expect(live).toHaveCSS('transition-duration', '0s');
   await expect(card.frameLocator('iframe').getByText('Small live content')).toBeVisible();
-  await card.frameLocator('iframe').getByRole('button', { name: 'Small live content' }).click();
+  await clickScaledFrame(page, card.locator('iframe'), card.frameLocator('iframe').getByRole('button', { name: 'Small live content' }));
+  expect(await card.locator('.card-stage, .fit-stage, .fit-stage-inner').evaluateAll(elements => elements.every(element => element.scrollLeft === 0 && element.scrollTop === 0))).toBe(true);
   await expect(card.frameLocator('iframe').locator('button')).toHaveAttribute('data-clicked', 'true');
   expect(await card.locator('iframe').getAttribute('src')).toBe(existingFrame);
   const frame = await card.locator('iframe').boundingBox();
@@ -110,10 +112,9 @@ test('a warmed frame replaces the cover before interaction and remains mounted',
     const rect = element.parentElement!.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewport: innerWidth };
   });
-  const image = await cover.evaluate(element => {
-    const img = element as HTMLImageElement;
-    const rect = img.getBoundingClientRect();
-    return { width: img.naturalWidth * 1.5, height: img.naturalHeight * 1.5, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  const image = await card.locator('.card-stage').evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { width: 120 * 1.5, height: 80 * 1.5, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
   });
   const scale = frame!.width / content.viewport;
   expect(Math.abs(content.width * scale - image.width)).toBeLessThanOrEqual(1);

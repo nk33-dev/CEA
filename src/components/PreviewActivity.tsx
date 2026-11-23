@@ -81,6 +81,12 @@ export function createActivity() {
       if (!retained.includes(id)) { waiting.add(id); scheduleWarm(); }
       return () => {
         waiting.delete(id);
+        if (warming.delete(id)) {
+          gpu.delete(id);
+          retained = retained.filter(value => value !== id);
+          publish();
+          scheduleWarm();
+        }
         if (!waiting.size && warmTimer) { clearTimeout(warmTimer); warmTimer = undefined; }
       };
     },

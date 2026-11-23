@@ -3,7 +3,7 @@ import { htmlPlayPage } from '../../server/play.ts';
 import { BACKGROUND_RELEASE_MS } from '../../src/components/PreviewActivity.tsx';
 import { mockLibrary } from './fixtures/mockLibrary.ts';
 
-test('covered frames stay renderable while warming and accept the first hover and click', async ({ page }) => {
+test('cold previews use a loading state instead of mismatched covers and accept the first hover and click', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   for (const asset of assets.values()) asset.cover = `assets/${asset.id}/cover.png`;
   let release!: () => void;
@@ -13,11 +13,13 @@ test('covered frames stay renderable while warming and accept the first hover an
   await page.mouse.move(0, 0);
   const card = page.locator('.card').first();
   await expect(card.locator('iframe')).toHaveCount(1);
-  await expect(card.locator('.card-cover')).toBeVisible();
+  await expect(card.locator('.card-cover')).toHaveCount(0);
+  await expect(card.locator('.stage-loading[data-busy=true]')).toBeVisible();
   await expect(card.locator('iframe')).toHaveCSS('visibility', 'visible');
   const hit = await card.locator('.card-stage').evaluate(element => {
     const rect = element.getBoundingClientRect();
-    return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.classList.contains('card-cover');
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return hit?.tagName !== 'IFRAME' && hit?.closest('.card-stage') === element;
   });
   expect(hit).toBe(true);
   release();
@@ -122,7 +124,7 @@ test('long background stays release frames and restore only current visible card
   await visibility(true);
   await page.clock.runFor(BACKGROUND_RELEASE_MS + 100);
   await expect(page.locator('iframe')).toHaveCount(0);
-  await expect(page.locator('.card-cover:visible')).toHaveCount(3);
+  await expect(page.locator('.card-cover')).toHaveCount(0);
   await visibility(false);
   await page.clock.resume();
   await expect(page.locator('.fit-stage[data-display]')).toHaveCount(3);

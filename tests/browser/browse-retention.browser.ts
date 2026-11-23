@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mockLibrary } from './fixtures/mockLibrary.ts';
 
-test('a cover remains visible and a visited preview survives scrolling away and back', async ({ page }) => {
+test('a visited preview survives scrolling away and back without loading a cover', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   const template = structuredClone(assets.get('demo-a')!);
   assets.clear();
@@ -13,7 +13,7 @@ test('a cover remains visible and a visited preview survives scrolling away and 
   page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/play/')) requests.push(request.url()); });
   await page.goto('/');
   const first = page.locator('.card').first();
-  await expect(first.locator('.card-cover')).toBeVisible();
+  await expect(first.locator('.card-cover')).toHaveCount(0);
   await first.locator('.card-stage').hover();
   await expect(first.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
   const counter = first.frameLocator('iframe').getByRole('button', { name: '0', exact: true });
@@ -29,7 +29,7 @@ test('a cover remains visible and a visited preview survives scrolling away and 
   expect(await page.locator('iframe').count()).toBeLessThanOrEqual(12);
 });
 
-test('visible covers warm two at a time and a hovered card bypasses the queue', async ({ page }) => {
+test('visible previews warm two at a time and a hovered card bypasses the queue', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   const template = structuredClone(assets.get('demo-a')!);
   assets.clear();
@@ -48,7 +48,7 @@ test('visible covers warm two at a time and a hovered card bypasses the queue', 
   await page.goto('/');
   await page.mouse.move(0, 0);
   await expect.poll(() => started.length).toBe(2);
-  await expect(page.locator('.browse-progress')).not.toHaveAttribute('data-busy', 'true');
+  await expect(page.locator('.browse-progress')).toHaveAttribute('data-busy', 'true');
   expect(await page.locator('iframe').count()).toBe(2);
   const target = page.locator('[data-asset-id="warm-0002"]');
   await target.locator('.card-stage').hover();
@@ -61,7 +61,7 @@ test('visible covers warm two at a time and a hovered card bypasses the queue', 
   await expect.poll(() => started.length).toBe(6);
   await expect(page.locator('iframe')).toHaveCount(6);
   await expect(page.locator('.fit-stage[data-display]')).toHaveCount(6);
-  await expect(page.locator('.card-cover:visible')).toHaveCount(18);
+  await expect(page.locator('.card-cover')).toHaveCount(0);
   expect(started.some(url => url.includes('/warm-0006/'))).toBe(false);
 });
 
@@ -124,8 +124,32 @@ test('a broken cover falls back to a live preview', async ({ page }) => {
   await expect(first.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
 });
 
+test('offscreen unfinished previews cannot block the current viewport', async ({ page }) => {
+  const { assets } = await mockLibrary(page);
+  const template = structuredClone(assets.get('demo-a')!);
+  assets.clear();
+  for (let index = 0; index < 24; index++) {
+    const id = `queue-${String(index).padStart(2, '0')}`;
+    assets.set(id, { ...structuredClone(template), id, title: id, texts: {} });
+  }
+  await page.route(/\/play\/queue-0[01]\//, route => route.fulfill({
+    contentType: 'text/html', body: '<script>parent.postMessage({type:"cea:boot"},"*")</script>',
+  }));
+  await page.goto('/');
+  await expect(page.locator('iframe')).toHaveCount(2);
+  const target = page.locator('[data-asset-id="queue-12"]');
+  await target.locator('.card-stage').scrollIntoViewIfNeeded();
+  await expect(target.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('[data-asset-id="queue-00"] iframe')).toHaveCount(0);
+  await target.locator('.card-stage').hover();
+  await target.frameLocator('iframe').getByRole('button', { name: '0', exact: true }).click();
+  await expect(target.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
+});
+
 test('a stalled runtime exposes an unscaled retry and recovers without leaving the list', async ({ page }) => {
-  await mockLibrary(page);
+  const { assets } = await mockLibrary(page);
+  assets.delete('demo-b');
+  assets.delete('demo-c');
   let recover = false;
   await page.route('**/play/**', route => recover ? route.fallback() : route.fulfill({
     contentType: 'text/html',
@@ -133,8 +157,8 @@ test('a stalled runtime exposes an unscaled retry and recovers without leaving t
   }));
   await page.clock.install();
   await page.goto('/');
-  await expect(page.locator('iframe')).toHaveCount(3);
-  await expect.poll(() => page.frames().filter(frame => frame.url().includes('/play/')).length).toBe(3);
+  await expect(page.locator('iframe')).toHaveCount(1);
+  await expect.poll(() => page.frames().filter(frame => frame.url().includes('/play/')).length).toBe(1);
   await page.clock.runFor(13000);
   const failure = page.locator('.card').first().locator('.preview-failure');
   await expect(failure).toBeVisible();

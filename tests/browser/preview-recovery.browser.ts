@@ -58,7 +58,7 @@ test('WebGL contexts are bounded across many cards without changing ordinary pre
   await expect.poll(() => page.locator('iframe').count()).toBeLessThanOrEqual(6);
   const last = page.locator('.card').nth(17);
   await expect(last.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
-  await expect(page.locator('.card').first().locator('.card-cover')).toBeVisible();
+  await expect(page.locator('.card').first().locator('iframe')).toHaveCount(0);
   const cardFrame = last.frameLocator('iframe');
   await cardFrame.locator('canvas').evaluate(canvas => canvas.dispatchEvent(new Event('webglcontextlost')));
   await expect(last.locator('.preview-failure')).toBeVisible();

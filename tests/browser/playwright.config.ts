@@ -6,6 +6,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
+    channel: process.env.CEA_TEST_BROWSER_CHANNEL,
     baseURL: process.env.CEA_TEST_URL ?? 'http://127.0.0.1:5180',
     viewport: { width: 1440, height: 900 },
     // 测试真实的滚动条绘制与拖动，不采用 headless 默认的隐藏滚动条参数。

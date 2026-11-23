@@ -72,7 +72,7 @@ describe('列表预览预算', () => {
     expect(activity.resident()).toEqual([]);
   });
 
-  it('可见封面限量预热，悬停不用等待预热队列', () => {
+  it('可见预览限量预热，悬停不用等待预热队列', () => {
     vi.useFakeTimers();
     const activity = createActivity();
     for (let index = 0; index < 6; index++) activity.prewarm(String(index));
@@ -94,7 +94,7 @@ describe('列表预览预算', () => {
     expect(activity.resident().filter(id => id === '5')).toHaveLength(1);
   });
 
-  it('卡片离开视口时取消尚未开始的预热', () => {
+  it('离屏时取消排队和进行中的预热，已就绪的实例仍保留', () => {
     vi.useFakeTimers();
     const activity = createActivity();
     const cancel = activity.prewarm('offscreen');
@@ -104,7 +104,13 @@ describe('列表预览预算', () => {
     const cancelNext = activity.prewarm('next');
     vi.advanceTimersByTime(120);
     cancelNext();
+    expect(activity.resident()).toEqual([]);
     activity.ready('next');
-    expect(activity.resident()).toEqual(['next']);
+    const cancelVisible = activity.prewarm('visible');
+    vi.advanceTimersByTime(120);
+    expect(activity.resident()).toEqual(['visible']);
+    activity.ready('visible');
+    cancelVisible();
+    expect(activity.resident()).toEqual(['visible']);
   });
 });

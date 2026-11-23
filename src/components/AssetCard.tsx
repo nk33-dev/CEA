@@ -11,7 +11,7 @@ import { frameworkLabel } from '../../shared/frameworks.ts';
 import type { AssetSummary } from '../../shared/types.ts';
 import { api, errorMessage, fileUrl } from '../lib/api.ts';
 import { useLibrary } from '../lib/store.tsx';
-import { FitStage, useInView } from './Stage.tsx';
+import { FitStage, PreviewLoading, useInView } from './Stage.tsx';
 import { localizedTitle, translatedValue } from '../../shared/contentLocale.ts';
 import { preloadDetailPage } from '../lib/detailRoute.ts';
 import { usePreviewActivity, useRetainedPreview } from './PreviewActivity.tsx';
@@ -42,7 +42,8 @@ const MAX_TAGS = 3;
 export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, locale, tagLabels, activeTags, selecting, selected, onToggleSelect, onFavorite, onTag, onDelete }: CardProps) {
   useUi();
   const { ref, inView } = useInView<HTMLDivElement>();
-  const { ref: visibleRef, inView: visible } = useInView<HTMLElement>('0px', 0.1);
+  const { ref: visibleRef, inView: visible } = useInView<HTMLDivElement>('0px', 0.1);
+  const stageRef = useCallback((element: HTMLDivElement | null) => { ref.current = element; visibleRef.current = element; }, [ref, visibleRef]);
   const { activity } = usePreviewActivity();
   const { notify } = useLibrary();
   const [hovered, setHovered] = useState(false);
@@ -55,9 +56,10 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(leaveTimer.current), []);
   const wantsLive = !selecting && !paused && (live || hovered || focused);
+  const runnable = asset.frameworks.length > 0;
   useEffect(() => setCoverFailed(false), [asset.cover, asset.updatedAt]);
-  const retained = useRetainedPreview(asset.id, inView && (!asset.cover || coverFailed || wantsLive), visible && !selecting && !!asset.cover && !coverFailed);
-  const mounted = retained && asset.frameworks.length > 0;
+  const retained = useRetainedPreview(asset.id, runnable && inView && wantsLive, runnable && visible && !selecting);
+  const mounted = retained && runnable;
   const active = mounted && inView && wantsLive;
   useEffect(() => {
     activity?.activate(asset.id, active);
@@ -107,17 +109,18 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   };
 
   return (
-    <article ref={visibleRef} data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
-      <div className="card-stage" ref={ref}
+    <article data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
+      <div className="card-stage" ref={stageRef}
         onPointerEnter={e => { if (e.pointerType === 'mouse') hover(true); }}
         onPointerLeave={() => hover(false)}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
-        {asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
+        {!runnable && asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
           style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
           src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
+        {runnable && !mounted && <PreviewLoading busy={visible && !selecting} />}
         {mounted && <FitStage assetId={asset.id} framework={asset.frameworks[0]} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
           active={active} onResume={resume} onHoverChange={hover} reloadKey={replay}
-          loadingIndicator={!asset.cover || coverFailed || wantsLive}
+          loadingIndicator
           onWarm={() => activity?.ready(asset.id)}
           onResources={contexts => activity?.resources(asset.id, contexts)}
           onError={() => activity?.ready(asset.id)} />}

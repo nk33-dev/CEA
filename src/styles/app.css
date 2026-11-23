@@ -446,7 +446,7 @@ input:is([type=checkbox], [type=radio]):focus-visible { outline: 2px solid var(-
 .card:hover { border-color: var(--line-2); box-shadow: 0 4px 16px -8px rgb(13 13 13 / 0.12); }
 .card.is-selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
 .card-stage {
-  position: relative; order: 0; aspect-ratio: 4 / 3; overflow: hidden;
+  position: relative; order: 0; aspect-ratio: 4 / 3; overflow: clip;
   border-radius: 5px; background: var(--preview-light); transition: background-color 240ms ease;
 }
 :is(.card-stage, .preview-well, .stage-host) { color-scheme: only light; }
@@ -459,10 +459,10 @@ input:is([type=checkbox], [type=radio]):focus-visible { outline: 2px solid var(-
 .card-cover { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: scale-down; padding: min(12px, 4%); background: inherit; }
 .card-cover[data-kind=section] { object-fit: contain; padding: 0; }
 .card-cover[data-kind=page] { height: auto; padding: 0; transform-origin: top center; }
-.card-stage:has(.fit-stage[data-display]) .card-cover { visibility: hidden; }
-.fit-stage { position: absolute; inset: 0; overflow: hidden; }
-.fit-stage-inner { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
-.fit-stage-inner[data-inset] .stage-frame { clip-path: inset(1px); }
+/* iframe 聚焦时不能滚动外层容器，否则绘制位置和点击坐标会一起偏移。 */
+.fit-stage { position: absolute; inset: 0; overflow: clip; }
+.fit-stage-inner { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: clip; }
+.fit-stage-inner[data-inset] { clip-path: inset(1px); }
 .preview-failure { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 16px; background: var(--surface); color: var(--fg-2); font-size: 13px; z-index: 4; }
 .card-select { position: absolute; inset: 0; z-index: 2; border: 0; background: transparent; cursor: pointer; }
 .card-select:hover { background: rgb(13 13 13 / 0.03); }
@@ -680,7 +680,7 @@ html:has(.fullscreen-frame.is-active) { scrollbar-gutter: auto; overflow: hidden
 .device-screen-desktop { border-radius: 0 0 9px 9px; }
 .device-screen-phone { border-radius: 0 0 41px 41px; }
 .device-content { position: absolute; transform-origin: 50% 50%; }
-.device-page { position: absolute; inset: 0; overflow: hidden; }
+.device-page { position: absolute; inset: 0; overflow: clip; }
 .phone-island { position: absolute; z-index: 3; top: 22px; left: 50%; width: 120px; height: 34px; margin-left: -60px; border-radius: 999px; background: #000; pointer-events: none; }
 .phone-status { position: absolute; inset: 11px 11px auto; z-index: 2; display: flex; align-items: center; justify-content: space-between; height: 50px; padding: 4px 30px 0 44px; border-radius: 41px 41px 0 0; background: var(--preview-light); color: #0d0d0d; pointer-events: none; }
 .preview-well.theme-dark .phone-status { background: var(--preview-dark); color: #f4f4f5; }

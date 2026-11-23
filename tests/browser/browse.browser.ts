@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { AssetSummary } from '../../shared/types.ts';
 import { htmlPlayPage } from '../../server/play.ts';
 import { mockLibrary, PNG } from './fixtures/mockLibrary.ts';
+import { clickScaledFrame } from './fixtures/framePointer.ts';
 
 const preview = htmlPlayPage('Preview', [
   { path: 'markup.html', content: '<button id="counter">0</button><div class="moving"></div>' },
@@ -98,11 +99,13 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(frame.locator('html')).toHaveAttribute('data-paused', '', { timeout: 5000 });
   await first.locator('.card-stage').hover();
   await expect(frame.locator('html')).not.toHaveAttribute('data-paused', '');
-  await frame.getByRole('button', { name: '0', exact: true }).click();
+  await clickScaledFrame(page, first.locator('iframe'), frame.getByRole('button', { name: '0', exact: true }));
   await expect(frame.getByRole('button', { name: '1', exact: true })).toBeVisible();
   await page.mouse.move(1, 1);
+  await expect(frame.locator('html')).toHaveAttribute('data-paused', '');
+  await first.getByRole('button', { name: '播放预览', exact: true }).click();
   await first.getByRole('button', { name: '暂停预览', exact: true }).click();
-  await frame.getByRole('button', { name: '1', exact: true }).click();
+  await clickScaledFrame(page, first.locator('iframe'), frame.getByRole('button', { name: '1', exact: true }));
   await expect(frame.getByRole('button', { name: '2', exact: true })).toBeVisible();
   await expect(frame.locator('html')).not.toHaveAttribute('data-paused', '');
 
@@ -172,7 +175,7 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(page.getByRole('button', { name: '上一页', exact: true })).toBeDisabled();
 });
 
-test('visible previews load together and language changes preserve frames', async ({ page }) => {
+test('visible previews warm in bounded batches and language changes preserve frames', async ({ page }) => {
   await mockLibrary(page);
   const started: number[] = [];
   page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/play/')) started.push(Date.now()); });
@@ -182,7 +185,9 @@ test('visible previews load together and language changes preserve frames', asyn
     const count = await page.locator('.card').count();
     return count > 0 && await page.locator('.fit-stage[data-ready=true]').count() === count;
   }).toBe(true);
-  expect(Math.max(...started) - Math.min(...started)).toBeLessThan(1000);
+  expect(started).toHaveLength(3);
+  expect(started[1] - started[0]).toBeLessThan(1000);
+  expect(started[2] - started[0]).toBeGreaterThanOrEqual(1000);
   const before = await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')));
   await page.getByRole('button', { name: '语言', exact: true }).click();
   await page.getByRole('radiogroup', { name: '内容语言', exact: true }).getByRole('radio', { name: 'English', exact: true }).check();
@@ -190,7 +195,7 @@ test('visible previews load together and language changes preserve frames', asyn
   expect(await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')))).toEqual(before);
 });
 
-test('phone scrolling keeps covers and bounds retained preview instances', async ({ page }) => {
+test('phone scrolling pauses or releases offscreen previews and bounds retained instances', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockLibrary(page);
   await page.goto('/');
@@ -199,7 +204,10 @@ test('phone scrolling keeps covers and bounds retained preview instances', async
   const first = page.locator('.card').first();
   await page.locator('.card').last().scrollIntoViewIfNeeded();
   expect(await page.locator('iframe').count()).toBeLessThanOrEqual(12);
-  await expect(first.frameLocator('iframe').locator('html')).toHaveAttribute('data-paused', '');
+  await expect.poll(async () => {
+    if (!await first.locator('iframe').count()) return true;
+    return first.frameLocator('iframe').locator('html').getAttribute('data-paused', { timeout: 500 }).then(value => value === '', () => true);
+  }).toBe(true);
   const widths = await page.evaluate(() => ({ layout: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
   expect(widths.content).toBeLessThanOrEqual(widths.layout);
 });
@@ -247,9 +255,10 @@ test('entry transforms do not resize the thumbnail and loading stays at display 
     await route.fulfill({ contentType: 'text/html', body: animated });
   });
   await page.goto('/');
-  await expect(page.locator('.card-cover')).toHaveCount(1);
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('.card-cover')).toHaveCount(0);
   await page.locator('.card-stage').hover();
-  await expect(page.locator('.fit-stage > .stage-loading')).toHaveCount(0);
+  await expect(page.locator('.fit-stage > .stage-loading')).toHaveCount(1);
   const loading = page.locator('.browse-progress[data-busy=true]');
   await expect(loading).toBeVisible();
   await expect(loading).toHaveCSS('opacity', '1');
@@ -259,7 +268,7 @@ test('entry transforms do not resize the thumbnail and loading stays at display 
   await page.locator('.home').screenshot({ path: 'test-results/preview-loading.png' });
   release();
   await expect(page.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
-  await expect(page.locator('.fit-stage-inner')).toHaveCSS('transition-property', 'opacity');
+  await expect(page.locator('.fit-stage-inner')).toHaveCSS('transition-duration', '0s');
   await expect(page.locator('.fit-stage-inner')).toHaveCSS('opacity', '1');
   const geometry = await page.locator('.fit-stage-inner').evaluate(async element => {
     const values = new Set<string>();

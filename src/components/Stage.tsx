@@ -297,6 +297,7 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
   const [warm, setWarm] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const displayed = ready && (warm || props.active);
   useEffect(() => {
     if (inView && props.loadingIndicator !== false && !ready && !failed) return activity?.begin();
   }, [activity, inView, ready, failed, props.loadingIndicator]);
@@ -315,18 +316,18 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
     x: -t.x / t.scale, y: -t.y / t.scale, width: box.width / t.scale, height: box.height / t.scale,
   } : null, [t?.x, t?.y, t?.scale, box?.width, box?.height]);
   return (
-    <div ref={ref} className="fit-stage" data-ready={ready || undefined} data-display={ready && (warm || props.active) || undefined}>
+    <div ref={ref} className="fit-stage" data-ready={ready || undefined} data-display={displayed || undefined}>
       {t && (
         <div className="fit-stage-inner" data-measured={bounds ? '' : undefined}
           data-inset={kind === 'component' && bounds && bounds.x > 1 && bounds.y > 1 && bounds.x + bounds.width < view.width - 1 && bounds.y + bounds.height < view.height - 1 || undefined}
-          aria-hidden={!ready || undefined} inert={!ready}
-          style={{ opacity: ready ? 1 : 0, width: view.width, height: view.height, transform: `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) scale(${t.scale})` }}>
+          aria-hidden={!displayed || undefined} inert={!displayed}
+          style={{ opacity: displayed ? 1 : 0, width: view.width, height: view.height, transform: `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) scale(${t.scale})` }}>
           <Stage key={attempt} {...props} thumbnail visibleArea={visibleArea} loadingIndicator={false} errorIndicator={false} onBounds={receiveBounds}
             onWarm={() => { setWarm(true); props.onWarm?.(); }}
             onError={() => { setFailed(true); props.onError?.(); }} onReady={() => { setFailed(false); setReady(true); props.onReady?.(); }} />
         </div>
       )}
-      {!activity && <PreviewLoading busy={!ready && !failed} />}
+      {props.loadingIndicator !== false && <PreviewLoading busy={!displayed && !failed} />}
       {failed && <PreviewFailure onRetry={() => { setFailed(false); setReady(false); setWarm(false); setAttempt(value => value + 1); }} />}
     </div>
   );
