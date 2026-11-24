@@ -3,6 +3,7 @@ import { PLAYBACK_SCRIPT } from './playback.ts';
 import { PREVIEW_HEALTH_SCRIPT } from './previewHealth.ts';
 import { PREVIEW_OVERLAY_SCRIPT } from './previewOverlays.ts';
 import { PREVIEW_NAVIGATION_SCRIPT } from './previewNavigation.ts';
+import { preparePreviewMarkup, PREVIEW_IMAGES_SCRIPT } from './previewImages.ts';
 import type { ThemeContract } from '../shared/theme.ts';
 
 /**
@@ -92,6 +93,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   document.addEventListener('pointerdown',prepareSelect,true);
   document.addEventListener('focusin',prepareSelect,true);
   ${PLAYBACK_SCRIPT}
+  ${PREVIEW_IMAGES_SCRIPT}
   previewSuspended=params.get('suspended')==='1';
   ${PREVIEW_HEALTH_SCRIPT}
   ${PREVIEW_OVERLAY_SCRIPT}
@@ -317,7 +319,7 @@ ${style}
 </style>
 </head>
 <body>
-${get('markup.html')}
+${preparePreviewMarkup(get('markup.html'))}
 ${script.trim() ? `<script>\n${escapeScript(script)}\n</script>` : ''}
 ${moduleCode ? `<script>\n${escapeScript(moduleCode)}\n</script>` : ''}
 </body>

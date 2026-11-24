@@ -16,6 +16,8 @@ React、Vue 和 HTML 模块复用 Rolldown。资源 import 编译为相对地址
 
 `/play/<id>/<framework>/<path>` 只提供已索引到该实现的文件，资源请求不读取整份素材源码。资源响应保留原字节并支持条件缓存。编辑草稿仅引用对应已保存素材的资源，不把资源编码进草稿请求。
 
+预览 iframe 保持无同源权限的沙箱。本地图片需要以匿名 CORS 请求加载，才能用于 Canvas 像素读取和 WebGL 纹理；资源响应沿用 `Access-Control-Allow-Origin: *`。生成播放页时通过 HTML 解析器为本地 `img src` 补充 `crossorigin`，运行时同样处理 `new Image()`、属性赋值和动态插入的图片。仅处理当前播放目录中的资源，不覆盖素材显式指定的跨域模式或外链图片设置，不回写素材源码，也不改变复制和导出的内容。
+
 依赖优先从当前素材库的 `.runtime/node_modules` 解析，未安装的包回退到 CEA 程序目录。React、React DOM 和 Vue 始终使用 CEA 的同一运行实例，避免插件依赖带入第二份框架。素材依赖不会进入 CEA 的前端应用包。
 
 素材库的 `.runtime/package.json` 与锁文件记录本机预览依赖；程序不会自动安装依赖或执行素材提供的安装脚本。迁移素材库时，在 `.runtime` 内用 `npm ci --ignore-scripts` 恢复运行环境。素材导出保留每个实现的依赖声明，不打包 `node_modules`。
