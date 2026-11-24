@@ -3,6 +3,31 @@ import { htmlPlayPage } from '../../server/play.ts';
 import { PREVIEW_IDLE_MS, SCROLL_SETTLE_MS } from '../../src/components/PreviewActivity.tsx';
 import { mockLibrary } from './fixtures/mockLibrary.ts';
 
+test('cards inserted beneath a stationary pointer stay paused until the mouse moves', async ({ page }) => {
+  const { assets } = await mockLibrary(page);
+  assets.delete('demo-b');
+  assets.delete('demo-c');
+  assets.get('demo-a')!.cover = 'assets/demo-a/cover.png';
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route(/\/api\/assets\?/, async route => { await gate; await route.fallback(); });
+  await page.goto('/');
+  await page.mouse.move(240, 320);
+  release();
+  const card = page.locator('.card').first();
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
+  expect(await card.locator('.card-stage').evaluate(element => element.matches(':hover'))).toBe(true);
+  const frame = card.frameLocator('iframe');
+  await expect(frame.locator('html')).toHaveAttribute('data-paused', '');
+  await expect(card.getByRole('button', { name: '播放预览', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.waitForTimeout(300);
+  await expect(frame.locator('html')).toHaveAttribute('data-paused', '');
+  await page.mouse.move(250, 325);
+  await expect(frame.locator('html')).not.toHaveAttribute('data-paused', '');
+  await page.mouse.move(0, 0);
+  await expect(frame.locator('html')).toHaveAttribute('data-paused', '');
+});
+
 test('scrolling and short pointer passes do not start cold previews', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   for (const asset of assets.values()) asset.cover = `assets/${asset.id}/cover.png`;
@@ -48,14 +73,20 @@ test('scroll pauses a mounted preview without replacing its frame or interaction
   await frame.getByRole('button', { name: '0', exact: true }).click();
   await card.locator('iframe').evaluate(element => element.setAttribute('data-session', 'kept'));
   const ticks = () => frame.locator('html').evaluate(() => (window as unknown as { ticks: number }).ticks);
-  for (let index = 0; index < 5; index++) {
-    await page.evaluate(() => window.dispatchEvent(new Event('scroll')));
-    await page.waitForTimeout(80);
+  const scrolling = await page.evaluateHandle(() => {
+    const timer = setInterval(() => window.dispatchEvent(new Event('scroll')), 50);
+    return () => clearInterval(timer);
+  });
+  let paused: number;
+  try {
     await expect(frame.locator('html')).toHaveAttribute('data-paused', '');
+    paused = await ticks();
+    await page.waitForTimeout(300);
+    expect(await ticks()).toBe(paused);
+  } finally {
+    await scrolling.evaluate(stop => stop());
+    await scrolling.dispose();
   }
-  const paused = await ticks();
-  await page.waitForTimeout(60);
-  expect(await ticks()).toBe(paused);
   await expect.poll(ticks).toBeGreaterThan(paused);
   await expect(card.locator('iframe')).toHaveAttribute('data-session', 'kept');
   await expect(frame.getByRole('button', { name: '1', exact: true })).toBeVisible();

@@ -139,10 +139,9 @@ export const PLAYBACK_SCRIPT = String.raw`
   });
   function resumeForHover(event){
     if(!resumeOnInteraction||!event.isTrusted||event.pointerType!=='mouse')return;
-    if(event.type==='pointerover'?event.relatedTarget!==null:!previewPaused)return;
+    if(!previewPaused)return;
     window.parent.postMessage({type:'cea:hover',value:true},'*');
   }
-  document.addEventListener('pointerover',resumeForHover,true);
   document.addEventListener('pointermove',resumeForHover,true);
   document.addEventListener('pointerout',function(event){
     if(!resumeOnInteraction||!event.isTrusted||event.pointerType!=='mouse'||event.relatedTarget!==null)return;

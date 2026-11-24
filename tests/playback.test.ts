@@ -430,19 +430,28 @@ describe('预览播放控制', () => {
   it('真实鼠标进入 iframe 时报告悬停，播放由宿主统一调度', () => {
     const h = harness();
     h.control.setActive(false, true);
-    h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
+    h.listeners.get('pointermove')?.({ isTrusted: true, pointerType: 'mouse' });
     expect(h.attributes.has('data-paused')).toBe(true);
     expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:hover', value: true }, '*');
     h.listeners.get('pointerout')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
     expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:hover', value: false }, '*');
   });
 
-  it('触屏、内部节点间移动和合成悬停不会启动播放', () => {
+  it('触屏、合成移动和内部边界事件不会启动播放', () => {
     const h = harness();
     h.control.setActive(false, true);
-    h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'touch', relatedTarget: null });
-    h.listeners.get('pointerover')?.({ isTrusted: false, pointerType: 'mouse', relatedTarget: null });
+    h.listeners.get('pointermove')?.({ isTrusted: true, pointerType: 'touch', relatedTarget: null });
+    h.listeners.get('pointermove')?.({ isTrusted: false, pointerType: 'mouse', relatedTarget: null });
     h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: {} });
+    expect(h.attributes.has('data-paused')).toBe(true);
+    expect(h.window.parent.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('静止光标下插入预览或合成移动不请求播放', () => {
+    const h = harness();
+    h.control.setActive(false, true);
+    h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
+    h.listeners.get('pointermove')?.({ isTrusted: false, pointerType: 'mouse' });
     expect(h.attributes.has('data-paused')).toBe(true);
     expect(h.window.parent.postMessage).not.toHaveBeenCalled();
   });

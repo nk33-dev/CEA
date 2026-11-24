@@ -71,18 +71,24 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   }, [activity, asset.id, active]);
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
   const hover = useCallback((value: boolean) => {
-    clearTimeout(enterTimer.current);
     if (value) {
+      if (enterTimer.current !== undefined) return;
       enterTimer.current = setTimeout(() => {
+        enterTimer.current = undefined;
         setHovered(true); setPaused(false);
       }, 100);
-    } else { setHovered(false); setFocused(false); }
+    } else {
+      clearTimeout(enterTimer.current);
+      enterTimer.current = undefined;
+      setHovered(false); setFocused(false);
+    }
   }, []);
   useEffect(() => {
     if (!hovered && !focused) return;
     const leave = () => {
       if (ref.current?.matches(':hover')) return;
       clearTimeout(enterTimer.current);
+      enterTimer.current = undefined;
       setHovered(false);
       setFocused(false);
     };
@@ -118,7 +124,7 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   return (
     <article data-asset-id={asset.id} className={`card${selected ? ' is-selected' : ''}${asset.favorite ? ' is-fav' : ''}`}>
       <div className="card-stage" ref={stageRef}
-        onPointerEnter={e => { if (e.pointerType === 'mouse') hover(true); }}
+        onPointerMove={e => { if (e.isTrusted && e.pointerType === 'mouse') hover(true); }}
         onPointerLeave={() => hover(false)}
         onClick={selecting ? undefined : resume}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
