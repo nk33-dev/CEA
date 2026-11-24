@@ -27,6 +27,7 @@ test('a post-ready runtime failure exposes retry and recovers in place', async (
   const card = page.locator('.card').first();
   await expect(card.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
   await card.locator('.card-stage').hover();
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   await card.frameLocator('iframe').getByRole('button', { name: 'Crash', exact: true }).click();
   await expect(card.locator('.preview-failure')).toBeVisible();
   await card.getByRole('button', { name: '重试预览', exact: true }).click();

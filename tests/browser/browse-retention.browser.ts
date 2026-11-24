@@ -34,7 +34,7 @@ test('a visited preview survives a full page scroll without loading again', asyn
   expect(await page.locator('iframe').count()).toBeLessThanOrEqual(24);
 });
 
-test('visible previews warm two at a time and a hovered card bypasses the queue', async ({ page }) => {
+test('visible previews warm serially and a hovered card takes priority over background work', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   const template = structuredClone(assets.get('demo-a')!);
   assets.clear();
@@ -52,20 +52,21 @@ test('visible previews warm two at a time and a hovered card bypasses the queue'
   });
   await page.goto('/');
   await page.mouse.move(0, 0);
-  await expect.poll(() => started.length).toBe(2);
+  await expect.poll(() => started.length).toBe(1);
   await expect(page.locator('.browse-progress')).not.toHaveAttribute('data-busy', 'true');
-  expect(await page.locator('iframe').count()).toBe(2);
+  expect(await page.locator('iframe').count()).toBe(1);
   const target = page.locator('[data-asset-id="warm-0002"]');
   await target.locator('.card-stage').hover();
-  await expect.poll(() => started.length).toBe(3);
+  await expect.poll(() => started.length).toBe(2);
   expect(started.at(-1)).toContain('/warm-0002/');
   release();
   await expect(target.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
   await target.frameLocator('iframe').getByRole('button', { name: '0', exact: true }).click();
   await expect(target.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
-  await expect.poll(() => started.length).toBe(6);
+  await page.mouse.move(0, 0);
+  await expect.poll(() => started.length, { timeout: 16000 }).toBe(6);
   await expect(page.locator('iframe')).toHaveCount(6);
-  await expect(page.locator('.fit-stage[data-display]')).toHaveCount(6);
+  await expect(page.locator('.fit-stage[data-display]')).toHaveCount(6, { timeout: 10000 });
   await expect(page.locator('.card-cover:visible')).toHaveCount(18);
   expect(started.some(url => url.includes('/warm-0006/'))).toBe(false);
 });
@@ -141,12 +142,13 @@ test('offscreen unfinished previews cannot block the current viewport', async ({
     contentType: 'text/html', body: '<script>parent.postMessage({type:"cea:boot"},"*")</script>',
   }));
   await page.goto('/');
-  await expect(page.locator('iframe')).toHaveCount(2);
+  await expect(page.locator('iframe')).toHaveCount(1);
   const target = page.locator('[data-asset-id="queue-12"]');
   await target.locator('.card-stage').scrollIntoViewIfNeeded();
-  await expect(target.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+  await expect(target.locator('.fit-stage')).toHaveAttribute('data-ready', 'true', { timeout: 12000 });
   await expect(page.locator('[data-asset-id="queue-00"] iframe')).toHaveCount(0);
   await target.locator('.card-stage').hover();
+  await expect(target.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   await target.frameLocator('iframe').getByRole('button', { name: '0', exact: true }).click();
   await expect(target.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
 });

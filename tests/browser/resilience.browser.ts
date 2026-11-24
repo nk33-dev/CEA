@@ -20,6 +20,7 @@ test('blocked browser storage leaves browsing and session theme switching usable
   await page.getByRole('radio', { name: '深色界面', exact: true }).check();
   await expect(page.locator('html')).toHaveAttribute('data-ui-theme', 'dark');
   await page.locator('.card').first().locator('.card-stage').hover();
+  await expect(page.locator('.card').first().locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   await page.locator('.card').first().frameLocator('iframe').locator('#counter').click();
   await expect(page.locator('.card').first().frameLocator('iframe').locator('#counter')).toHaveText('1');
   expect(errors).toEqual([]);

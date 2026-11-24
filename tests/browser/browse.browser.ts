@@ -36,7 +36,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]
     expect(new Set(cards.map(card => card.y)).size).toBe(2);
     expect(Math.min(...await page.locator('.card-stage').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height)))).toBeGreaterThanOrEqual(200);
     expect(cards[3].y - cards[0].bottom).toBeGreaterThanOrEqual(16);
-    await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6);
+    await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6, { timeout: 16000 });
     await page.screenshot({ path: `test-results/browse-six-${size.width}.png` });
   });
 }
@@ -70,7 +70,7 @@ for (const locale of ['zh', 'en']) {
     }
     const seventh = page.locator('.card').nth(6);
     await seventh.scrollIntoViewIfNeeded();
-    await expect(seventh.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
+    await expect(seventh.locator('.fit-stage')).toHaveAttribute('data-ready', 'true', { timeout: 12000 });
   });
 }
 
@@ -184,9 +184,9 @@ test('visible previews warm in bounded batches and language changes preserve fra
   await expect.poll(async () => {
     const count = await page.locator('.card').count();
     return count > 0 && await page.locator('.fit-stage[data-ready=true]').count() === count;
-  }).toBe(true);
+  }, { timeout: 10000 }).toBe(true);
   expect(started).toHaveLength(3);
-  expect(started[1] - started[0]).toBeLessThan(1000);
+  expect(started[1] - started[0]).toBeGreaterThanOrEqual(1000);
   expect(started[2] - started[0]).toBeGreaterThanOrEqual(1000);
   const before = await page.locator('iframe').evaluateAll(frames => frames.map(frame => frame.getAttribute('src')));
   await page.getByRole('button', { name: '语言', exact: true }).click();

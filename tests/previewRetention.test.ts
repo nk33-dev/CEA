@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BACKGROUND_RELEASE_MS, createActivity, MAX_GPU_CONTEXTS, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS } from '../src/components/PreviewActivity.tsx';
+import { BACKGROUND_RELEASE_MS, createActivity, MAX_GPU_CONTEXTS, MAX_RETAINED_PREVIEWS, MAX_WARMING_PREVIEWS, PREVIEW_IDLE_MS, SCROLL_SETTLE_MS } from '../src/components/PreviewActivity.tsx';
 
 afterEach(() => vi.useRealTimers());
 
@@ -16,7 +16,8 @@ describe('列表预览预算', () => {
     expect(activity.resident()).toEqual(['live']);
     activity.setVisible(true);
     expect(activity.resident()).toEqual(['live']);
-    vi.advanceTimersByTime(120);
+    activity.activate('live', false);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
     expect(activity.resident()).toContain('waiting');
     activity.setVisible(false);
     vi.advanceTimersByTime(BACKGROUND_RELEASE_MS);
@@ -77,20 +78,22 @@ describe('列表预览预算', () => {
     const activity = createActivity();
     for (let index = 0; index < 6; index++) activity.prewarm(String(index));
     expect(activity.resident()).toEqual([]);
-    vi.advanceTimersByTime(120);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
     expect(activity.resident()).toHaveLength(MAX_WARMING_PREVIEWS);
     activity.retain('5');
     expect(activity.resident()).toContain('5');
     expect(activity.snapshot()).toBe(0);
     activity.ready('0');
-    vi.advanceTimersByTime(120);
-    expect(activity.resident()).toContain('2');
-    expect(activity.resident()).not.toContain('3');
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
+    expect(activity.resident()).toContain('1');
+    expect(activity.resident()).not.toContain('2');
     activity.ready('1');
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
+    expect(activity.resident()).toContain('2');
     activity.ready('2');
-    vi.advanceTimersByTime(120);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
     expect(activity.resident()).toContain('3');
-    expect(activity.resident()).toContain('4');
+    expect(activity.resident()).not.toContain('4');
     expect(activity.resident().filter(id => id === '5')).toHaveLength(1);
   });
 
@@ -102,13 +105,13 @@ describe('列表预览预算', () => {
     vi.runAllTimers();
     expect(activity.resident()).toEqual([]);
     const cancelNext = activity.prewarm('next');
-    vi.advanceTimersByTime(120);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
     cancelNext();
     activity.cancelWarm('next');
     expect(activity.resident()).toEqual([]);
     activity.ready('next');
     const cancelVisible = activity.prewarm('visible');
-    vi.advanceTimersByTime(120);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
     expect(activity.resident()).toEqual(['visible']);
     activity.ready('visible');
     cancelVisible();
@@ -119,7 +122,7 @@ describe('列表预览预算', () => {
     vi.useFakeTimers();
     const activity = createActivity();
     const cancel = activity.prewarm('playing');
-    vi.advanceTimersByTime(120);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
     activity.resources('playing', 1);
     activity.retain('playing');
     activity.activate('playing', true);
@@ -131,5 +134,38 @@ describe('列表预览预算', () => {
     }
     expect(activity.resident()).toContain('playing');
     expect(activity.resident()).toHaveLength(MAX_GPU_CONTEXTS);
+  });
+
+  it('滚动和翻页期间不启动预览，稳定后串行预热，操作中的预览优先', () => {
+    vi.useFakeTimers();
+    const activity = createActivity();
+    activity.setNavigating(true);
+    activity.prewarm('first');
+    activity.prewarm('second');
+    activity.retain('hovered');
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
+    expect(activity.resident()).toEqual([]);
+    activity.setNavigating(false);
+    activity.scroll();
+    expect(activity.canInteract()).toBe(false);
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS + PREVIEW_IDLE_MS - 1);
+    expect(activity.resident()).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(activity.resident()).toEqual(['first']);
+    activity.retain('hovered');
+    activity.activate('hovered', true);
+    expect(activity.suspended('first')).toBe(true);
+    expect(activity.suspended('hovered')).toBe(false);
+    activity.ready('first');
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
+    expect(activity.resident()).not.toContain('second');
+    activity.scroll();
+    expect(activity.suspended('hovered')).toBe(true);
+    vi.advanceTimersByTime(SCROLL_SETTLE_MS);
+    expect(activity.suspended('hovered')).toBe(false);
+    activity.activate('hovered', false);
+    vi.advanceTimersByTime(PREVIEW_IDLE_MS);
+    expect(activity.resident()).toContain('second');
+    activity.dispose();
   });
 });

@@ -35,7 +35,7 @@ for (const width of [1440, 1000]) {
     page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/play/')) loads++; });
     await page.route('**/play/**', route => route.fulfill({ contentType: 'text/html', body: preview }));
     await page.goto('/');
-    await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6);
+    await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6, { timeout: 16000 });
     const frame = page.locator('.card').filter({ has: page.locator('a[href="/a/sorted-0"]') }).frameLocator('iframe');
     await frame.locator('#counter').evaluate(element => { element.textContent = '7'; });
     const geometry = () => page.evaluate(() => {

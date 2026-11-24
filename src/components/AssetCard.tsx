@@ -14,7 +14,7 @@ import { useLibrary } from '../lib/store.tsx';
 import { FitStage, PreviewLoading, useInView } from './Stage.tsx';
 import { localizedTitle, translatedValue } from '../../shared/contentLocale.ts';
 import { preloadDetailPage } from '../lib/detailRoute.ts';
-import { usePreviewActivity, useRetainedPreview } from './PreviewActivity.tsx';
+import { usePreviewActivity, usePreviewSuspended, useRetainedPreview } from './PreviewActivity.tsx';
 import { previewKind, previewScale } from '../../shared/preview.ts';
 
 interface CardProps {
@@ -45,6 +45,7 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const { ref: visibleRef, inView: visible } = useInView<HTMLDivElement>('0px', 0.1);
   const stageRef = useCallback((element: HTMLDivElement | null) => { ref.current = element; visibleRef.current = element; }, [ref, visibleRef]);
   const { activity } = usePreviewActivity();
+  const suspended = usePreviewSuspended(asset.id);
   const { notify } = useLibrary();
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -54,8 +55,8 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const [coverFailed, setCoverFailed] = useState(false);
   const [warmedVersion, setWarmedVersion] = useState<string | null>(null);
   const favoriteBusy = useRef(false);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(leaveTimer.current), []);
+  const enterTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(enterTimer.current), []);
   const wantsLive = !selecting && !paused && (live || hovered || focused);
   const runnable = asset.frameworks.length > 0;
   useEffect(() => setCoverFailed(false), [asset.cover, asset.updatedAt]);
@@ -70,15 +71,18 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   }, [activity, asset.id, active]);
   const resume = useCallback(() => { setPaused(false); setFocused(true); }, []);
   const hover = useCallback((value: boolean) => {
-    clearTimeout(leaveTimer.current);
-    if (value) { setHovered(true); setPaused(false); }
-    else leaveTimer.current = setTimeout(() => { setHovered(false); setFocused(false); }, 180);
+    clearTimeout(enterTimer.current);
+    if (value) {
+      enterTimer.current = setTimeout(() => {
+        setHovered(true); setPaused(false);
+      }, 100);
+    } else { setHovered(false); setFocused(false); }
   }, []);
   useEffect(() => {
     if (!hovered && !focused) return;
     const leave = () => {
       if (ref.current?.matches(':hover')) return;
-      clearTimeout(leaveTimer.current);
+      clearTimeout(enterTimer.current);
       setHovered(false);
       setFocused(false);
     };
@@ -116,13 +120,14 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
       <div className="card-stage" ref={stageRef}
         onPointerEnter={e => { if (e.pointerType === 'mouse') hover(true); }}
         onPointerLeave={() => hover(false)}
+        onClick={selecting ? undefined : resume}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
         {hasCover && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
           style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
           src={`${fileUrl(asset.cover!)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
         {runnable && !mounted && !hasCover && <PreviewLoading busy={visible && !selecting} />}
         {mounted && <FitStage assetId={asset.id} framework={asset.frameworks[0]} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
-          active={active} onResume={resume} onHoverChange={hover} reloadKey={replay}
+          active={active} suspended={suspended} onResume={resume} onHoverChange={hover} reloadKey={replay}
           loadingIndicator={!hasCover || wantsLive}
           onWarm={() => { setWarmedVersion(asset.updatedAt); activity?.ready(asset.id); }}
           onResources={contexts => activity?.resources(asset.id, contexts)}

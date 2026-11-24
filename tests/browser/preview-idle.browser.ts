@@ -23,6 +23,7 @@ test('cold previews show their covers while warming and accept the first hover a
   expect(hit).toBe(true);
   release();
   await card.locator('.card-stage').hover();
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   const frame = card.frameLocator('iframe');
   await frame.getByRole('button', { name: '0', exact: true }).click();
   await expect(frame.getByRole('button', { name: '1', exact: true })).toBeVisible();
@@ -107,8 +108,8 @@ test('long background stays release frames and show covers until interaction res
   for (const asset of assets.values()) asset.cover = `assets/${asset.id}/cover.png`;
   await page.goto('/?sort=title');
   await page.mouse.move(0, 0);
-  await expect(page.locator('iframe')).toHaveCount(3);
-  await expect(page.locator('.fit-stage[data-display]')).toHaveCount(3);
+  await expect(page.locator('iframe')).toHaveCount(3, { timeout: 10000 });
+  await expect(page.locator('.fit-stage[data-display]')).toHaveCount(3, { timeout: 10000 });
   await page.clock.install();
   const visibility = (hidden: boolean) => page.evaluate(value => {
     Object.defineProperty(document, 'hidden', { configurable: true, value });

@@ -27,7 +27,7 @@ export const PREVIEW_HEALTH_SCRIPT = String.raw`
     if(previewFault!=='gpu')return;
     previewFault=false;
     if(previewReady){
-      setActive(requestedActive&&!document.hidden,requestedInteractive);
+      setActive(requestedActive&&!document.hidden&&!previewSuspended,requestedInteractive);
       parent.postMessage({type:'cea:ready',bounds:contentBounds(),layout:currentLayout()},'*');
     }
   },true);

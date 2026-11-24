@@ -1,6 +1,7 @@
 export const PLAYBACK_SCRIPT = String.raw`
   var previewPaused = false;
   var resumeOnInteraction = false;
+  var previewSuspended = false;
   var frameSequence = 0;
   var frames = new Map();
   var pausedAnimations = new Set();
@@ -130,7 +131,7 @@ export const PLAYBACK_SCRIPT = String.raw`
   document.addEventListener('play', function() { if(previewPaused) pauseMedia(); }, true);
   function resumeForInteraction(event) {
     if (!previewPaused || !resumeOnInteraction || !event.isTrusted) return;
-    setActive(true);
+    if (!previewSuspended) setActive(true);
     window.parent.postMessage({ type: 'cea:resume' }, '*');
   }
   ['pointerdown', 'keydown', 'click'].forEach(function(type) {
@@ -139,7 +140,6 @@ export const PLAYBACK_SCRIPT = String.raw`
   function resumeForHover(event){
     if(!resumeOnInteraction||!event.isTrusted||event.pointerType!=='mouse')return;
     if(event.type==='pointerover'?event.relatedTarget!==null:!previewPaused)return;
-    setActive(true);
     window.parent.postMessage({type:'cea:hover',value:true},'*');
   }
   document.addEventListener('pointerover',resumeForHover,true);

@@ -36,9 +36,9 @@ for (const edge of ['outside', 'sliver'] as const) {
     });
     try {
       await page.goto(edge === 'outside' ? '/?fw=html' : '/', { waitUntil: 'domcontentloaded' });
-      await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6);
+      await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6, { timeout: 16000 });
       const seventh = page.locator('[data-asset-id="viewport-6"]');
-      await expect(seventh.locator('iframe')).toHaveCount(1);
+      await expect(seventh.locator('iframe')).toHaveCount(0);
       if (edge === 'sliver') await seventh.locator('.card-stage').evaluate(element => window.scrollTo(0, element.getBoundingClientRect().top + scrollY - innerHeight + 4));
       const top = (await seventh.locator('.card-stage').boundingBox())!.y;
       if (edge === 'outside') expect(top).toBeGreaterThanOrEqual(900);
@@ -53,7 +53,7 @@ for (const edge of ['outside', 'sliver'] as const) {
       await seventh.scrollIntoViewIfNeeded();
       await expect(page.locator('.browse-progress')).toHaveAttribute('data-busy', 'true');
       await page.evaluate(() => window.scrollTo(0, 0));
-      await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6);
+      await expect(page.locator('.fit-stage[data-ready=true]')).toHaveCount(6, { timeout: 16000 });
       await expect(page.locator('.browse-progress')).not.toHaveAttribute('data-busy', 'true');
       await seventh.scrollIntoViewIfNeeded();
       await expect(page.locator('.browse-progress')).toHaveAttribute('data-busy', 'true');

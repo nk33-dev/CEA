@@ -113,7 +113,7 @@ for (const width of [1440, 800, 390]) {
     await expect(page.getByRole('dialog', { name: 'Language', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Language', exact: true }).click();
     await expect(page.getByRole('radiogroup', { name: 'Content language', exact: true }).getByRole('radio', { name: '中文', exact: true })).toBeChecked();
-    await page.getByRole('searchbox', { name: 'Search components', exact: true }).click();
+    await page.mouse.click(2, 2);
     await expect(page.getByRole('dialog', { name: 'Language', exact: true })).toHaveCount(0);
     await page.getByRole('radio', { name: 'Dark interface', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-ui-theme', 'dark');

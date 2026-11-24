@@ -239,6 +239,29 @@ describe('预览播放控制', () => {
     }, '*');
   });
 
+  it('宿主挂起时保留预热剩余时间，点击只请求优先级而不自行恢复', async () => {
+    const h = harness(true);
+    h.listeners.get('DOMContentLoaded')?.();
+    await Promise.resolve();
+    h.frame(16);
+    h.frame(32);
+    h.time(432);
+    const suspend = (value: boolean) => h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:suspended', value } });
+    suspend(true);
+    h.listeners.get('pointerdown')?.({ isTrusted: true });
+    expect(h.attributes.has('data-paused')).toBe(true);
+    expect(h.window.parent.postMessage).toHaveBeenCalledWith({ type: 'cea:resume' }, '*');
+    h.time(10_000);
+    expect(h.window.parent.postMessage.mock.calls.filter(([message]) => message.type === 'cea:warmed')).toHaveLength(0);
+    suspend(false);
+    expect(h.attributes.has('data-paused')).toBe(false);
+    h.time(11_199);
+    expect(h.attributes.has('data-paused')).toBe(false);
+    h.time(11_200);
+    expect(h.attributes.has('data-paused')).toBe(true);
+    expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:warmed' }, '*');
+  });
+
   it('加载中切换播放状态采用最新指令，就绪后仍能通过互动恢复', async () => {
     const h = harness(true);
     h.messages.get('message')?.({ source: h.window.parent, data: { type: 'cea:active', value: true, interactive: true } });
@@ -404,11 +427,11 @@ describe('预览播放控制', () => {
     expect(h.window.parent.postMessage).toHaveBeenCalledOnce();
   });
 
-  it('真实鼠标进入 iframe 时恢复播放并报告离开，不依赖外层收到悬停事件', () => {
+  it('真实鼠标进入 iframe 时报告悬停，播放由宿主统一调度', () => {
     const h = harness();
     h.control.setActive(false, true);
     h.listeners.get('pointerover')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
-    expect(h.attributes.has('data-paused')).toBe(false);
+    expect(h.attributes.has('data-paused')).toBe(true);
     expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:hover', value: true }, '*');
     h.listeners.get('pointerout')?.({ isTrusted: true, pointerType: 'mouse', relatedTarget: null });
     expect(h.window.parent.postMessage).toHaveBeenLastCalledWith({ type: 'cea:hover', value: false }, '*');

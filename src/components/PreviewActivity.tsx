@@ -1,8 +1,10 @@
 import { uiText, useUi } from '../lib/uiI18n.ts';
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 export const MAX_RETAINED_PREVIEWS = 24;
-export const MAX_WARMING_PREVIEWS = 2;
+export const MAX_WARMING_PREVIEWS = 1;
+export const PREVIEW_IDLE_MS = 600;
+export const SCROLL_SETTLE_MS = 220;
 export const MAX_GPU_CONTEXTS = 6;
 export const BACKGROUND_RELEASE_MS = 30_000;
 
@@ -16,7 +18,12 @@ export function createActivity() {
   const active = new Set<string>();
   let warmTimer: ReturnType<typeof setTimeout> | undefined;
   let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+  let scrollTimer: ReturnType<typeof setTimeout> | undefined;
   let visible = true;
+  let moving = false;
+  let navigating = false;
+  const canInteract = () => visible && !moving && !navigating;
+  const canWarm = () => canInteract() && active.size === 0;
   const publish = () => listeners.forEach(listener => listener());
   const trim = (keep?: string) => {
     let changed = false;
@@ -37,7 +44,7 @@ export function createActivity() {
     publish();
   };
   const scheduleWarm = () => {
-    if (!visible || warmTimer || !waiting.size || warming.size >= MAX_WARMING_PREVIEWS) return;
+    if (!canWarm() || warmTimer || !waiting.size || warming.size >= MAX_WARMING_PREVIEWS) return;
     warmTimer = setTimeout(() => {
       warmTimer = undefined;
       for (const id of waiting) {
@@ -46,13 +53,29 @@ export function createActivity() {
         warming.add(id);
         retain(id);
       }
-    }, 120);
+    }, PREVIEW_IDLE_MS);
   };
+  const stopWarm = () => { clearTimeout(warmTimer); warmTimer = undefined; };
   return {
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     snapshot: () => pending.size,
     resident: () => retained,
     visible: () => visible,
+    canInteract,
+    suspended: (id: string) => !canInteract() || active.size > 0 && !active.has(id),
+    setNavigating(value: boolean) {
+      if (navigating === value) return;
+      navigating = value;
+      if (value) stopWarm();
+      else scheduleWarm();
+      publish();
+    },
+    scroll() {
+      clearTimeout(scrollTimer);
+      stopWarm();
+      if (!moving) { moving = true; publish(); }
+      scrollTimer = setTimeout(() => { moving = false; publish(); scheduleWarm(); }, SCROLL_SETTLE_MS);
+    },
     setVisible(value: boolean) {
       if (visible === value) return;
       visible = value;
@@ -70,9 +93,9 @@ export function createActivity() {
       } else scheduleWarm();
       publish();
     },
-    dispose() { clearTimeout(warmTimer); clearTimeout(releaseTimer); },
+    dispose() { clearTimeout(warmTimer); clearTimeout(releaseTimer); clearTimeout(scrollTimer); },
     retain(id: string) {
-      if (!visible) return;
+      if (!canInteract()) return;
       waiting.delete(id);
       warming.delete(id);
       retain(id);
@@ -103,9 +126,11 @@ export function createActivity() {
       scheduleWarm();
     },
     activate(id: string, value: boolean) {
+      const changed = active.has(id) !== value;
       if (value) active.add(id);
       else active.delete(id);
-      if (trim()) publish();
+      if (value) stopWarm();
+      if (trim() || changed) publish();
       scheduleWarm();
     },
     release(id: string) {
@@ -129,14 +154,23 @@ export function createActivity() {
 
 const ActivityContext = createContext<ReturnType<typeof createActivity> | null>(null);
 
-export function PreviewActivity({ children }: { children: ReactNode }) {
+export function PreviewActivity({ children, navigating = false }: { children: ReactNode; navigating?: boolean }) {
   useUi();
   const [activity] = useState(createActivity);
+  useLayoutEffect(() => activity.setNavigating(navigating), [activity, navigating]);
   useEffect(() => {
     const sync = () => activity.setVisible(!document.hidden);
     sync();
     document.addEventListener('visibilitychange', sync);
-    return () => { document.removeEventListener('visibilitychange', sync); activity.dispose(); };
+    const scroll = () => activity.scroll();
+    window.addEventListener('scroll', scroll, { passive: true });
+    window.addEventListener('wheel', scroll, { passive: true });
+    return () => {
+      document.removeEventListener('visibilitychange', sync);
+      window.removeEventListener('scroll', scroll);
+      window.removeEventListener('wheel', scroll);
+      activity.dispose();
+    };
   }, [activity]);
   return <ActivityContext.Provider value={activity}>{children}</ActivityContext.Provider>;
 }
@@ -144,6 +178,11 @@ export function PreviewActivity({ children }: { children: ReactNode }) {
 export function usePreviewActivity() {
   const activity = useContext(ActivityContext);
   return { activity };
+}
+
+export function usePreviewSuspended(id: string) {
+  const activity = useContext(ActivityContext);
+  return useSyncExternalStore(activity?.subscribe ?? (() => () => {}), () => activity?.suspended(id) ?? false, () => false);
 }
 
 const EMPTY_RESIDENTS: readonly string[] = [];
@@ -155,7 +194,7 @@ export function useRetainedPreview(id: string, requested: boolean, warm = false)
     activity?.resident ?? (() => EMPTY_RESIDENTS),
     () => EMPTY_RESIDENTS,
   );
-  const visible = useSyncExternalStore(activity?.subscribe ?? (() => () => {}), activity?.visible ?? (() => true), () => true);
+  const visible = useSyncExternalStore(activity?.subscribe ?? (() => () => {}), activity?.canInteract ?? (() => true), () => true);
   useEffect(() => {
     if (visible && requested) activity?.retain(id);
   }, [activity, id, requested, visible]);

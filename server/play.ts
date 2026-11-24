@@ -92,6 +92,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   document.addEventListener('pointerdown',prepareSelect,true);
   document.addEventListener('focusin',prepareSelect,true);
   ${PLAYBACK_SCRIPT}
+  previewSuspended=params.get('suspended')==='1';
   ${PREVIEW_HEALTH_SCRIPT}
   ${PREVIEW_OVERLAY_SCRIPT}
   ${PREVIEW_NAVIGATION_SCRIPT}
@@ -119,17 +120,17 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
     if(warmTimer!==null)warmRemaining=Math.max(0,warmRemaining-(performance.now()-warmStarted));
     nativeClearTimeout(warmTimer);
     warmTimer=null;
-    if(!warming||document.hidden)return;
+    if(!warming||document.hidden||previewSuspended)return;
     warmStarted=performance.now();
     warmTimer=nativeTimeout(function(){
       warmTimer=null;
       warming=false;
-      setActive(!previewFault&&requestedActive&&!document.hidden,requestedInteractive);
+      setActive(!previewFault&&!previewSuspended&&requestedActive&&!document.hidden,requestedInteractive);
       reportBounds();
       parent.postMessage({type:'cea:warmed'},'*');
     },warmRemaining);
   }
-  if(document.hidden)setActive(false,requestedInteractive);
+  if(document.hidden||previewSuspended)setActive(false,requestedInteractive);
   var boundsObserver=null,boundsObserved=new Set();
   document.addEventListener('DOMContentLoaded', function() {
     var fonts = document.fonts ? document.fonts.ready : Promise.resolve();
@@ -142,10 +143,10 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
         // 播放期间收到的指令记下来，播完再生效
         if (!requestedActive) {
           warming = true;
-          setActive(!document.hidden, requestedInteractive);
+          setActive(!document.hidden&&!previewSuspended, requestedInteractive);
           syncWarmTimer();
         } else {
-          setActive(requestedActive&&!document.hidden, requestedInteractive);
+          setActive(requestedActive&&!document.hidden&&!previewSuspended, requestedInteractive);
           parent.postMessage({type:'cea:warmed'},'*');
         }
         reportBounds();
@@ -243,7 +244,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   componentTheme(params.get('componentTheme'));
   document.addEventListener('visibilitychange', function(){
     syncWarmTimer();
-    setActive(!previewFault&&!document.hidden&&(!previewReady||warming||requestedActive), requestedInteractive);
+    setActive(!previewFault&&!previewSuspended&&!document.hidden&&(!previewReady||warming||requestedActive), requestedInteractive);
   });
   // 外层在预览就绪时会把当前主题再发一遍，值没变就什么都不做：
   // 空转一次 view transition 会截一张整页快照再淡入，卡片在这一瞬间会闪白。
@@ -262,6 +263,11 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
   addEventListener('message', function (e) {
     if(e.source!==parent)return;
     var d = e.data || {};
+    if(d.type==='cea:suspended'){
+      previewSuspended=Boolean(d.value);
+      syncWarmTimer();
+      setActive(!previewFault&&!previewSuspended&&!document.hidden&&(!previewReady||warming||requestedActive),requestedInteractive);
+    }
     if(d.type==='cea:probe'){
       parent.postMessage({ type: 'cea:boot' }, '*');
       if(gpuCount)parent.postMessage({type:'cea:resources',gpu:gpuCount},'*');
@@ -273,7 +279,7 @@ font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","M
       requestedActive=Boolean(d.value);
       requestedInteractive=Boolean(d.interactive);
       if(requestedActive&&warming){warming=false;syncWarmTimer();parent.postMessage({type:'cea:warmed'},'*');}
-      if(previewReady&&!warming)setActive(!previewFault&&requestedActive&&!document.hidden, requestedInteractive);
+      if(previewReady&&!warming)setActive(!previewFault&&!previewSuspended&&requestedActive&&!document.hidden, requestedInteractive);
     }
     if(d.type==='cea:component-theme'&&chosenTheme(d.value)!==(document.documentElement.dataset.theme||''))switchTheme(function(){componentTheme(d.value);});
     if(d.type==='cea:device')document.documentElement.dataset.device=d.value==='phone'?'phone':'desktop';

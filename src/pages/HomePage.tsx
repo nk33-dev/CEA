@@ -187,7 +187,7 @@ export function HomePage() {
   };
 
   return (
-    <PreviewActivity><div ref={browseStart} className="home">
+    <PreviewActivity navigating={loading}><div ref={browseStart} className="home">
       <div className="results-bar">
         <label className="search"><Search size={16} aria-hidden="true" />
           <input ref={search} type="search" placeholder={uiText("搜索组件、标签或交互")} aria-label={uiText("搜索组件")} value={query} onChange={e => setQuery(e.target.value)}
