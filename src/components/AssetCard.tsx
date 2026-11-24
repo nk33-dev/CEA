@@ -52,13 +52,16 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
   const [replay, setReplay] = useState(0);
   const [saving, setSaving] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
+  const [warmedVersion, setWarmedVersion] = useState<string | null>(null);
   const favoriteBusy = useRef(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(leaveTimer.current), []);
   const wantsLive = !selecting && !paused && (live || hovered || focused);
   const runnable = asset.frameworks.length > 0;
   useEffect(() => setCoverFailed(false), [asset.cover, asset.updatedAt]);
-  const retained = useRetainedPreview(asset.id, runnable && inView && wantsLive, runnable && visible && !selecting);
+  const hasCover = !!asset.cover && !coverFailed;
+  const retained = useRetainedPreview(asset.id, runnable && inView && wantsLive,
+    runnable && visible && !selecting && (!hasCover || warmedVersion !== asset.updatedAt));
   const mounted = retained && runnable;
   const active = mounted && inView && wantsLive;
   useEffect(() => {
@@ -114,16 +117,16 @@ export const AssetCard = memo(function AssetCard({ asset, live, onLiveChange, lo
         onPointerEnter={e => { if (e.pointerType === 'mouse') hover(true); }}
         onPointerLeave={() => hover(false)}
         onFocusCapture={() => setFocused(true)} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}>
-        {!runnable && asset.cover && !coverFailed && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
+        {hasCover && <img className="card-cover" data-kind={previewKind(asset.previewViewport)}
           style={{ transform: `scale(${previewScale(asset.previewScale)})` }}
-          src={`${fileUrl(asset.cover)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
-        {runnable && !mounted && <PreviewLoading busy={visible && !selecting} />}
+          src={`${fileUrl(asset.cover!)}?v=${encodeURIComponent(asset.updatedAt)}`} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />}
+        {runnable && !mounted && !hasCover && <PreviewLoading busy={visible && !selecting} />}
         {mounted && <FitStage assetId={asset.id} framework={asset.frameworks[0]} version={asset.updatedAt} title={title} viewport={asset.previewViewport} zoom={asset.previewScale}
           active={active} onResume={resume} onHoverChange={hover} reloadKey={replay}
-          loadingIndicator
-          onWarm={() => activity?.ready(asset.id)}
+          loadingIndicator={!hasCover || wantsLive}
+          onWarm={() => { setWarmedVersion(asset.updatedAt); activity?.ready(asset.id); }}
           onResources={contexts => activity?.resources(asset.id, contexts)}
-          onError={() => activity?.ready(asset.id)} />}
+          onError={() => { setWarmedVersion(asset.updatedAt); activity?.ready(asset.id); }} />}
         {selecting ? (
           <button type="button" className="card-select" aria-pressed={selected} aria-label={uiText("选择「{{value0}}」", {value0: title})} onClick={() => onToggleSelect(asset.id)}>
             <span className="card-check">{selected && <Check size={13} strokeWidth={3} aria-hidden="true" />}</span>

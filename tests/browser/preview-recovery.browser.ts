@@ -49,6 +49,8 @@ test('WebGL contexts are bounded across many cards without changing ordinary pre
   await page.route('**/play/**', route => route.fulfill({ contentType: 'text/html', body: playback }));
   await page.goto('/');
   await expect(page.locator('.card')).toHaveCount(24);
+  const loads: string[] = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/play/')) loads.push(request.url()); });
   for (let i = 0; i < 18; i++) {
     const card = page.locator('.card').nth(i);
     await card.scrollIntoViewIfNeeded();
@@ -64,6 +66,17 @@ test('WebGL contexts are bounded across many cards without changing ordinary pre
   await expect(last.locator('.preview-failure')).toBeVisible();
   await cardFrame.locator('canvas').evaluate(canvas => canvas.dispatchEvent(new Event('webglcontextrestored')));
   await expect(last.locator('.preview-failure')).toHaveCount(0);
+  await page.mouse.move(0, 0);
+  const first = page.locator('.card').first();
+  const count = loads.filter(url => url.includes('/gpu-0000/')).length;
+  await first.scrollIntoViewIfNeeded();
+  await expect(first.locator('.card-cover')).toBeVisible();
+  await page.waitForTimeout(1800);
+  await expect(first.locator('iframe')).toHaveCount(0);
+  expect(loads.filter(url => url.includes('/gpu-0000/')).length).toBe(count);
+  await first.locator('.card-stage').hover();
+  await expect(first.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
+  expect(loads.filter(url => url.includes('/gpu-0000/')).length).toBe(count + 1);
 });
 
 test('compile failures do not masquerade as ready previews', async ({ page }) => {

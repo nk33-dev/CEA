@@ -84,12 +84,12 @@ test('a high-density cover and its padded painted frame keep the same crop', asy
   for (const edge of ['left', 'right', 'top', 'bottom'] as const) expect(Math.abs(after[edge] - before[edge])).toBeLessThanOrEqual(1);
 });
 
-test('a runnable component bypasses its cover and keeps one frame for interaction', async ({ page }) => {
+test('a runnable component replaces its cover once and keeps one frame for interaction', async ({ page }) => {
   await page.goto(base);
   await page.mouse.move(0, 0);
   const card = page.locator('[data-asset-id="covered-html"]');
   const cover = card.locator('.card-cover');
-  await expect(cover).toHaveCount(0);
+  await expect(cover).toHaveCount(1);
   await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
   await expect(cover).toBeHidden();
   await expect(card.locator('.fit-stage')).toBeVisible();

@@ -459,6 +459,7 @@ input:is([type=checkbox], [type=radio]):focus-visible { outline: 2px solid var(-
 .card-cover { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: scale-down; padding: min(12px, 4%); background: inherit; }
 .card-cover[data-kind=section] { object-fit: contain; padding: 0; }
 .card-cover[data-kind=page] { height: auto; padding: 0; transform-origin: top center; }
+.card-stage:has(.fit-stage[data-display]) .card-cover { visibility: hidden; }
 /* iframe 聚焦时不能滚动外层容器，否则绘制位置和点击坐标会一起偏移。 */
 .fit-stage { position: absolute; inset: 0; overflow: clip; }
 .fit-stage-inner { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: clip; }

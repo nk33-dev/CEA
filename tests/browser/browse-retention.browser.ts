@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mockLibrary } from './fixtures/mockLibrary.ts';
 
-test('a visited preview survives scrolling away and back without loading a cover', async ({ page }) => {
+test('a visited preview survives a full page scroll without loading again', async ({ page }) => {
   const { assets } = await mockLibrary(page);
   const template = structuredClone(assets.get('demo-a')!);
   assets.clear();
@@ -13,20 +13,25 @@ test('a visited preview survives scrolling away and back without loading a cover
   page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/play/')) requests.push(request.url()); });
   await page.goto('/');
   const first = page.locator('.card').first();
-  await expect(first.locator('.card-cover')).toHaveCount(0);
+  await expect(first.locator('.card-cover')).toBeVisible();
   await first.locator('.card-stage').hover();
   await expect(first.locator('.fit-stage')).toHaveAttribute('data-ready', 'true');
   const counter = first.frameLocator('iframe').getByRole('button', { name: '0', exact: true });
   await counter.click();
   await expect(first.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
   const initialRequests = requests.filter(url => url.includes('/retained-00/')).length;
-  await page.locator('.card').nth(12).scrollIntoViewIfNeeded();
+  for (let index = 3; index < 24; index += 3) {
+    const next = page.locator('.card').nth(index);
+    await next.scrollIntoViewIfNeeded();
+    await next.locator('.card-stage').hover();
+    await expect(next.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
+  }
   await page.mouse.move(0, 0);
   await first.scrollIntoViewIfNeeded();
   await first.locator('.card-stage').hover();
   await expect(first.frameLocator('iframe').getByRole('button', { name: '1', exact: true })).toBeVisible();
   expect(requests.filter(url => url.includes('/retained-00/')).length).toBe(initialRequests);
-  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(12);
+  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(24);
 });
 
 test('visible previews warm two at a time and a hovered card bypasses the queue', async ({ page }) => {
@@ -48,7 +53,7 @@ test('visible previews warm two at a time and a hovered card bypasses the queue'
   await page.goto('/');
   await page.mouse.move(0, 0);
   await expect.poll(() => started.length).toBe(2);
-  await expect(page.locator('.browse-progress')).toHaveAttribute('data-busy', 'true');
+  await expect(page.locator('.browse-progress')).not.toHaveAttribute('data-busy', 'true');
   expect(await page.locator('iframe').count()).toBe(2);
   const target = page.locator('[data-asset-id="warm-0002"]');
   await target.locator('.card-stage').hover();
@@ -61,7 +66,7 @@ test('visible previews warm two at a time and a hovered card bypasses the queue'
   await expect.poll(() => started.length).toBe(6);
   await expect(page.locator('iframe')).toHaveCount(6);
   await expect(page.locator('.fit-stage[data-display]')).toHaveCount(6);
-  await expect(page.locator('.card-cover')).toHaveCount(0);
+  await expect(page.locator('.card-cover:visible')).toHaveCount(18);
   expect(started.some(url => url.includes('/warm-0006/'))).toBe(false);
 });
 

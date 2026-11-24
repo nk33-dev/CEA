@@ -1,7 +1,7 @@
 import { uiText, useUi } from '../lib/uiI18n.ts';
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
-export const MAX_RETAINED_PREVIEWS = 12;
+export const MAX_RETAINED_PREVIEWS = 24;
 export const MAX_WARMING_PREVIEWS = 2;
 export const MAX_GPU_CONTEXTS = 6;
 export const BACKGROUND_RELEASE_MS = 30_000;

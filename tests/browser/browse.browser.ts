@@ -91,7 +91,7 @@ test('one thousand records keep page and live-document counts bounded', async ({
   await expect(page.locator('.card')).toHaveCount(24);
   await expect(page.locator('.stage-host[aria-busy=false]').first()).toBeVisible();
   await expect.poll(() => page.locator('iframe').count()).toBeGreaterThan(2);
-  expect(await page.locator('iframe').count()).toBeLessThan(13);
+  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(24);
   expect(listRequests).toBe(1);
 
   const first = page.locator('.card').first();
@@ -130,7 +130,7 @@ test('one thousand records keep page and live-document counts bounded', async ({
     if (!await frame.count()) return true;
     return first.frameLocator('iframe').locator('html').getAttribute('data-paused', { timeout: 500 }).then(value => value === '', () => true);
   }).toBe(true);
-  expect(await page.locator('iframe').count()).toBeLessThan(13);
+  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(24);
   await page.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(page.locator('.card-title').first()).toHaveText('Component 24');
   expect(listRequests).toBe(2);
@@ -203,7 +203,7 @@ test('phone scrolling pauses or releases offscreen previews and bounds retained 
   await expect(page.locator('.stage-host[aria-busy=false]').first()).toBeVisible();
   const first = page.locator('.card').first();
   await page.locator('.card').last().scrollIntoViewIfNeeded();
-  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(12);
+  expect(await page.locator('iframe').count()).toBeLessThanOrEqual(24);
   await expect.poll(async () => {
     if (!await first.locator('iframe').count()) return true;
     return first.frameLocator('iframe').locator('html').getAttribute('data-paused', { timeout: 500 }).then(value => value === '', () => true);
@@ -256,7 +256,7 @@ test('entry transforms do not resize the thumbnail and loading stays at display 
   });
   await page.goto('/');
   await expect(page.locator('.card')).toHaveCount(1);
-  await expect(page.locator('.card-cover')).toHaveCount(0);
+  await expect(page.locator('.card-cover')).toHaveCount(1);
   await page.locator('.card-stage').hover();
   await expect(page.locator('.fit-stage > .stage-loading')).toHaveCount(1);
   const loading = page.locator('.browse-progress[data-busy=true]');
