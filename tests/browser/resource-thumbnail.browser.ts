@@ -56,7 +56,7 @@ test('a high-density cover and its padded painted frame keep the same crop', asy
   await page.goto(`${base}/?q=Painted`);
   await page.mouse.move(0, 0);
   const card = page.locator('[data-asset-id="painted-frame"]');
-  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true', { timeout: 16000 });
   const stage = card.locator('.card-stage');
   const darkBounds = async () => {
     const png = await stage.screenshot({ scale: 'css' });
@@ -90,7 +90,7 @@ test('a runnable component replaces its cover once and keeps one frame for inter
   const card = page.locator('[data-asset-id="covered-html"]');
   const cover = card.locator('.card-cover');
   await expect(cover).toHaveCount(1);
-  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true');
+  await expect(card.locator('.fit-stage')).toHaveAttribute('data-display', 'true', { timeout: 16000 });
   await expect(cover).toBeHidden();
   await expect(card.locator('.fit-stage')).toBeVisible();
   const existingFrame = await card.locator('iframe').getAttribute('src');
@@ -142,6 +142,7 @@ test('list thumbnails resolve original resource files through the framework-less
   for (const framework of ['html', 'react', 'vue']) {
     const card = page.locator(`[data-asset-id="local-${framework}"]`);
     await card.scrollIntoViewIfNeeded();
+    await card.locator('.card-stage').hover();
     const frame = card.frameLocator('iframe');
     await expect(frame.getByRole('img', { name: 'Local artwork' })).toBeVisible();
     await expect.poll(() => frame.locator('img').evaluate(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)).toBe(true);

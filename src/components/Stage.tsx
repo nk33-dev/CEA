@@ -326,7 +326,7 @@ export function FitStage({ viewport, zoom = 1, ...props }: StageProps) {
         <div className="fit-stage-inner" data-measured={bounds ? '' : undefined}
           data-inset={kind === 'component' && bounds && bounds.x > 1 && bounds.y > 1 && bounds.x + bounds.width < view.width - 1 && bounds.y + bounds.height < view.height - 1 || undefined}
           aria-hidden={!displayed || undefined} inert={!displayed}
-          style={{ opacity: displayed ? 1 : 0, width: view.width, height: view.height, transform: `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) scale(${t.scale})` }}>
+          style={{ opacity: displayed ? 1 : 0, width: view.width, height: view.height, transform: `translate(${t.x}px, ${t.y}px) scale(${t.scale})` }}>
           <Stage key={attempt} {...props} thumbnail visibleArea={visibleArea} loadingIndicator={false} errorIndicator={false} onBounds={receiveBounds}
             onWarm={() => { setWarm(true); props.onWarm?.(); }}
             onError={() => { setFailed(true); props.onError?.(); }} onReady={() => { setFailed(false); setReady(true); props.onReady?.(); }} />
